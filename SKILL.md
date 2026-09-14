@@ -1,244 +1,102 @@
 ---
 name: "expedia-virtual-card-reconciliation"
-description: "Pull Expedia virtual card data into a PDF guest+amount report. Use: check Expedia VCs, VC reconciliation, cards ready to charge, virtual card refund."
+description: "Reconcile Expedia virtual-card obligations into verified ready-to-charge and refund queues with a PDF guest-and-amount report. Use for: check Expedia VCs, VC reconciliation, cards ready to charge, or virtual card refund. Read-only; never charges or refunds a card."
 tags: [hotel, expedia, virtual-cards, reconciliation, browser, accounting]
+version: "0.2.0"
 ---
 
 # Expedia Virtual Card Reconciliation
 
-Pull and report virtual-card data from Expedia Partner Central's EVC Manage page: which cards are ready to charge, which need refunds, and for what amounts. Produces a styled PDF report.
+Read Expedia Partner Central's EVC Manage page, validate every extracted record, and produce ready-to-charge and refund queues. This skill is read-only: it never reveals card credentials and never charges or refunds a card.
 
-## Prerequisites
+## Safety invariants
 
-- Expedia Partner Central login credentials (username + password)
-- The hotel's Expedia property ID (`htid` parameter)
-- Browser access to `expediapartnercentral.com`
-- The property may have MFA/2FA enabled (SMS code to registered phone)
+- Retrieve the Expedia username and password only through Kolo's approved credential storage. Never ask the user to paste a password into chat.
+- Never print, log, persist in reports, or return passwords, MFA codes, full card numbers, CVVs, or expiration dates.
+- Ask for an MFA code only when Expedia requests it, use it once, and do not persist it.
+- Use the authenticated session only for the property selected for this run.
+- Treat an incomplete or unfamiliar page as `incomplete`; do not issue a financial total as complete.
+- Do not perform charges, refunds, reservation edits, or other financial actions.
 
-## Workflow
+## Required configuration
 
-### 1. Accept credentials
+Resolve `expedia.username` and `expedia.password` from Kolo's approved credential storage. Resolve `expedia.htid`, property name, and timezone from the property's saved non-secret configuration. If credentials are missing, start Kolo's approved credential-setup flow; do not collect secrets in conversation. If multiple properties are configured and the request is ambiguous, ask which property to use.
 
-Ask the user for their Expedia Partner Central credentials if not already provided:
-- Email (username)
-- Password
+## Deterministic workflow
 
-Also confirm the hotel's `htid` (Expedia property ID). Default to the hotel's configured property ID when the user hasn't specified one.
+### 1. Preflight
 
-### 2. Navigate and log in
+- Require Node.js 18 or newer and confirm `scripts/extract_evc.js` exists.
+- Create a unique, permission-restricted run directory; never reuse fixed report filenames.
+- Record a run ID, selected property, skill version, and start time without credentials.
 
-1. Navigate to `https://www.expediapartnercentral.com`
-2. The page redirects to a login form with an **Email** field and a **Next** button.
-3. Fill the email field via `evaluate`:
+### 2. Authenticate
 
-```js
-() => {
-  const e = document.querySelector('input[type="email"]') || document.querySelector('input[name="email"]') || document.querySelector('input[type="text"]');
-  e.value = '<email>';
-  e.dispatchEvent(new Event('input', {bubbles:true}));
-  e.dispatchEvent(new Event('change', {bubbles:true}));
-  return {found: !!e, valueLen: e.value.length};
+Reuse an authenticated Expedia Partner Central browser session when available. Otherwise open `https://www.expediapartnercentral.com` and populate its two-step login form using secrets from Kolo credential storage. Prefer semantic browser actions by accessible label. If Expedia requests MFA, ask the user for the current code and submit it once. Stop after one credential retry and report only a redacted error.
+
+### 3. Select and verify the property
+
+Navigate to:
+
+```text
+https://apps.expediapartnercentral.com/supply/reservations/evc-manage?tab=EVC_MANAGE&htid=<URL_ENCODED_HTID>
+```
+
+Verify that the visible property matches the configured property. Stop on a mismatch.
+
+### 4. Extract every page
+
+Map rows by validated table-header names, never fixed column numbers. Each page must produce:
+
+```json
+{
+  "pageNumber": 1,
+  "expectedCount": 12,
+  "records": [{
+    "queue": "ready_to_charge",
+    "guest": "Example Guest",
+    "reservationId": "ABC123",
+    "checkIn": "2026-09-14",
+    "status": "Available",
+    "remainingBalance": "USD 100.00",
+    "originalPayout": "USD 125.00"
+  }]
 }
 ```
 
-4. Click the **Next** button.
-5. On the password page (heading: "Enter your password"), fill the password field:
+Valid queues are `ready_to_charge` and `refund_due`. Scope empty states to their own section. Never extract card number, CVV, or expiration fields.
 
-```js
-() => {
-  const p = document.querySelector('input[type="password"]');
-  p.value = '<password>';
-  p.dispatchEvent(new Event('input', {bubbles:true}));
-  p.dispatchEvent(new Event('change', {bubbles:true}));
-  p.dispatchEvent(new Event('keyup', {bubbles:true}));
-  return {found: !!p, valueLen: p.value.length};
-}
-```
+For pagination, start at page 1, increment consecutively, and capture Expedia's displayed total. Stop when Next is disabled or the final displayed range is reached. Mark incomplete if a page repeats, page order changes, or 100 pages are reached. Save the collected contracts as `RUN_DIR/pages.json`.
 
-6. Click the **Continue** button (enables after password is filled).
-
-### 3. Handle MFA (if required)
-
-After successful password entry, Expedia may require additional verification:
-- A verification code is sent via SMS to the registered phone
-- The page shows: "Additional verification required — check your mobile"
-- Ask the user for the verification code
-- Type it into the **"Enter verification code"** textbox and click **VERIFY DEVICE**
-
-If the code expires, Expedia sends a new one and shows an alert: "We've sent you a new verification code." Close that alert and use the new code.
-
-After successful MFA, the dashboard loads showing "Welcome, <name>" and the property selector.
-
-### 4. Navigate to the EVC Manage page
-
-Navigate directly to:
-```
-https://apps.expediapartnercentral.com/supply/reservations/evc-manage?tab=EVC_MANAGE&htid=<HTID>
-```
-
-The page has two tabs: "Search for a card" and "Manage virtual cards" (selected by default via `tab=EVC_MANAGE`).
-
-### 5. Extract virtual card data
-
-Use `act: evaluate` to extract data from both sections:
-
-```js
-() => {
-  const result = { refunds: [], refundsEmpty: true, toCharge: [] };
-
-  const tables = [...document.querySelectorAll('table')];
-  for (const table of tables) {
-    const headerText = table.rows[0]?.textContent || '';
-    if (headerText.includes('Remaining balance')) {
-      const rows = [...table.rows];
-      for (let i = 1; i < rows.length; i++) {
-        const row = rows[i];
-        const cells = [...row.cells];
-        if (row.querySelector('button') && !row.querySelector('table') && cells.length >= 7) {
-          result.toCharge.push({
-            guest: cells[1].textContent.trim(),
-            reservation: cells[2].textContent.trim(),
-            checkIn: cells[3].textContent.trim(),
-            remainingBalance: cells[6].textContent.trim(),
-            originalPayout: ''
-          });
-        }
-        if (row.querySelector('table') && result.toCharge.length > 0) {
-          const text = row.textContent;
-          const amt = text.match(/USD\s*([\d,]+\.\d{2})/);
-          result.toCharge[result.toCharge.length - 1].originalPayout = amt ? amt[1] : '';
-        }
-      }
-    }
-  }
-
-  result.refundsEmpty = document.body.textContent.includes('No virtual cards found');
-
-  if (!result.refundsEmpty) {
-    const h2s = [...document.querySelectorAll('h2')];
-    const refundH2 = h2s.find(h => h.textContent.trim() === 'Virtual cards to refund');
-    if (refundH2) {
-      let parent = refundH2.parentElement;
-      for (let d = 0; d < 6; d++) {
-        const t = parent?.querySelector('table');
-        if (t && [...t.rows].length > 0) {
-          const rows = [...t.rows];
-          for (let i = 1; i < rows.length; i++) {
-            const row = rows[i];
-            if (row.querySelector('button') && !row.querySelector('table')) {
-              const cells = [...row.cells];
-              result.refunds.push({
-                guest: cells[1]?.textContent?.trim() || '',
-                reservation: cells[2]?.textContent?.trim() || '',
-                amount: ''
-              });
-            }
-            if (row.querySelector('table') && result.refunds.length > 0) {
-              const amt = row.textContent.match(/USD\s*([\d,]+\.\d{2})/);
-              result.refunds[result.refunds.length - 1].amount = amt ? amt[1] : '';
-            }
-          }
-          break;
-        }
-        parent = parent?.parentElement;
-      }
-    }
-  }
-
-  return result;
-}
-```
-
-### 6. Check for pagination
-
-The "ready to charge" table may span multiple pages. Check for "Previous records" / "Next records" buttons and page counts (e.g. "1-2 of 2 results"). If there are more pages, click **Next records** and re-extract, merging results. Stop when "Next records" is disabled or you've seen all results.
-
-### 7. Generate and deliver the PDF report
-
-After extracting data, generate a styled PDF report:
-
-**Step A — Build HTML report.** Write a styled HTML file to `/tmp/expedia-vc-report.html` using a heredoc or write tool. Template:
-
-```html
-<!DOCTYPE html>
-<html><head><meta charset="UTF-8">
-<style>
-  body { font-family: -apple-system, Segoe UI, sans-serif; max-width: 750px; margin: 40px auto; color: #1a1a2e; }
-  h1 { font-size: 20px; margin-bottom: 2px; }
-  .subtitle { color: #666; font-size: 12px; margin-bottom: 24px; }
-  h2 { font-size: 15px; border-bottom: 2px solid #2563eb; padding-bottom: 4px; margin-top: 28px; color: #2563eb; }
-  table { width: 100%; border-collapse: collapse; margin-top: 8px; }
-  th { background: #f1f5f9; text-align: left; padding: 8px 10px; font-size: 12px; text-transform: uppercase; color: #64748b; }
-  td { padding: 8px 10px; border-bottom: 1px solid #e2e8f0; font-size: 13px; }
-  .amount { text-align: right; font-variant-numeric: tabular-nums; }
-  .total-row td { font-weight: 700; border-top: 2px solid #2563eb; border-bottom: none; padding-top: 10px; }
-  .empty { color: #94a3b8; font-style: italic; padding: 8px 0; }
-  .footer { margin-top: 32px; color: #94a3b8; font-size: 10px; border-top: 1px solid #e2e8f0; padding-top: 12px; }
-  .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 10px; font-weight: 600; }
-  .badge-deactivated { background: #fef3c7; color: #92400e; }
-</style></head><body>
-<h1>Expedia Virtual Card Report</h1>
-<p class="subtitle">PROPERTY_NAME (htid: HTID) · Generated REPORT_DATE</p>
-
-<h2>Virtual Cards to Refund</h2>
-<!-- refund rows or empty message -->
-
-<h2>Virtual Cards Ready to Charge</h2>
-<table><thead><tr><th>Guest</th><th>Reservation</th><th>Check-in</th><th>Status</th><th>Amount</th></tr></thead><tbody>
-<!-- charge rows + total row -->
-</tbody></table>
-
-<div class="footer">Generated by Kolo · Data source: Expedia Partner Central EVC Manage · REPORT_DATE</div>
-</body></html>
-```
-
-For each charge row:
-```html
-<tr><td>GUEST</td><td>RES_ID</td><td>CHECKIN</td><td><span class="badge badge-deactivated">STATUS</span></td><td class="amount">$AMOUNT</td></tr>
-```
-
-Total row at bottom:
-```html
-<tr class="total-row"><td colspan="4">Total Ready to Charge</td><td class="amount">$TOTAL</td></tr>
-```
-
-Empty refunds:
-```html
-<p class="empty">No virtual cards found — nothing to refund</p>
-```
-
-**Step B — Render to PDF.** Use headless Chromium:
+### 5. Normalize and validate
 
 ```bash
-chromium --headless --no-sandbox --disable-gpu --print-to-pdf=/tmp/expedia-vc-report.pdf /tmp/expedia-vc-report.html
+node scripts/extract_evc.js RUN_DIR/pages.json > RUN_DIR/reconciliation.json
 ```
 
-**Step C — Deliver to the user.** 
-- Announce a brief summary of the numbers
-- Use the `message` tool to send the PDF: `message(action="send", channel="kolo", target="<kolo:uuid>", media="/tmp/expedia-vc-report.pdf", message="Here's your Expedia virtual card report.", filename="Expedia-VC-Report.pdf")`
-- Log the delivery via `kolo log-action`
+The engine performs integer-cent parsing, schema normalization, deduplication, repeated-page detection, currency-separated totals, and displayed-count validation. If it exits nonzero or returns `status: incomplete`, do not label the result complete. Report only the redacted reason.
+
+### 6. Build and verify the report
+
+Generate the PDF from `reconciliation.json`, never directly from page text. HTML-escape every inserted string. Include the property, Expedia property ID, timestamp and property timezone, both queues and currency-separated totals, completeness warnings, extracted versus displayed counts, skill version, run ID, and a statement that the report does not confirm a charge or refund was processed.
+
+Before delivery, verify that the PDF opens and contains the same counts and totals as `reconciliation.json`. If rendering fails, deliver the validated structured summary instead.
+
+### 7. Deliver and audit
+
+Deliver the report in the requesting conversation. Log only run ID, property, timestamps, counts, currency-separated totals, completion status, and output filename. Never log credentials, MFA codes, or card credentials.
 
 ## Error handling
 
-- **Login fails**: Re-verify field values via DOM check; re-submit once. If still failing, tell the user to verify their credentials.
-- **MFA code expired**: Expedia sends a new code automatically with an alert. Close the alert and ask the user for the new code.
-- **MFA code rejected**: Ask the user to confirm the correct code. Try once more.
-- **"No virtual cards found"**: Normal — report it as empty, not an error.
-- **All cards "Deactivated"**: Note it; original payout column still shows the amount.
-- **Page fails to load / session expired**: Re-login from step 2.
-- **Browser session lost** (only `newtab.html` visible): Re-login from scratch.
-- **PDF generation fails with chromium**: Fall back to delivering the plain-text table report.
+- **Missing stored credentials:** initiate approved Kolo credential setup; never request a password in chat.
+- **MFA expired or rejected:** request one fresh code; never echo or persist it.
+- **Property mismatch:** stop without extraction.
+- **Validated empty section:** return a valid empty queue.
+- **Missing or unfamiliar headers:** mark incomplete and retain only sanitized structural diagnostics.
+- **Repeated page or count mismatch:** mark incomplete; do not present totals as final.
+- **Invalid or mixed currency:** separate valid currencies or stop on a malformed record.
+- **Session expired:** reauthenticate once, then stop with a redacted error.
 
-## Gotchas
+## Release checks
 
-- The login is a 2-step flow (email → Next → password → Continue), NOT a single form.
-- The password field requires dispatching `input`, `change`, AND `keyup` events to enable the Continue button.
-- The "ready to charge" table has expandable guest rows with nested detail tables. Use `table.rows` (not `querySelectorAll('tr')`) to avoid picking up nested table rows.
-- Guest rows have 7 cells and contain an expand button; detail rows have 1 cell spanning full width.
-- Card details show the full card number, CVV, and expiration. The report should only surface the **amount** — do NOT include full card numbers.
-- The refund section heading says "Virtual cards to refund" (exact text) — match exactly.
-- PDF: use `chromium --headless --no-sandbox --print-to-pdf`. The `--no-sandbox` flag is required inside this container.
-
-## Model routing
-
-Browser-heavy workflow. Pin `sonnet` or higher for reliable DOM extraction and PDF rendering. `qwen` works fine for the extraction evaluate call when the page is already loaded.
+Run `npm test` before publication. Releases require coverage for exact money parsing, multipage merging, repeated pages, duplicates, empty queues, malformed rows, and count mismatches. Tag GitHub releases with the same version published in Kolo.

@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/jeanea-ai/expedia-virtual-card-reconciliation/schema/reconciliation-record.schema.json",
+  "title": "Expedia virtual card reconciliation record",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["queue", "guest", "reservationId", "currency", "amountCents", "sourcePage"],
+  "properties": {
+    "queue": { "enum": ["ready_to_charge", "refund_due"] },
+    "guest": { "type": "string", "minLength": 1 },
+    "reservationId": { "type": "string", "minLength": 1 },
+    "checkIn": { "type": ["string", "null"] },
+    "status": { "type": ["string", "null"] },
+    "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
+    "amountCents": { "type": "integer", "minimum": 0 },
+    "originalPayoutCents": { "type": ["integer", "null"], "minimum": 0 },
+    "sourcePage": { "type": "integer", "minimum": 1 }
+  }
+}

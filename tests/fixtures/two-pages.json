@@ -1,0 +1,17 @@
+[
+  {
+    "pageNumber": 1,
+    "expectedCount": 3,
+    "records": [
+      { "queue": "ready_to_charge", "guest": "Alex Rivera", "reservationId": "SAN-1001", "checkIn": "2026-09-10", "status": "Available", "remainingBalance": "USD 1,234.56", "originalPayout": "USD 1,300.00" },
+      { "queue": "refund_due", "guest": "Morgan Lee", "reservationId": "SAN-1002", "amount": "$25.50 USD" }
+    ]
+  },
+  {
+    "pageNumber": 2,
+    "expectedCount": 3,
+    "records": [
+      { "queue": "ready_to_charge", "guest": "Taylor & Co.", "reservationId": "SAN-1003", "checkIn": "2026-09-11", "status": "Deactivated", "remainingBalance": "100.00" }
+    ]
+  }
+]
