@@ -78,7 +78,7 @@ The engine performs integer-cent parsing, schema normalization, exact-duplicate 
 
 ### 6. Build and verify the report
 
-Generate the PDF from `reconciliation.json`, never directly from page text. HTML-escape every inserted string. Include the property, Expedia property ID, timestamp and property timezone, both queues and currency-separated totals, completeness warnings, extracted versus displayed counts, skill version, run ID, and a statement that the report does not confirm a charge or refund was processed.
+Generate the PDF from `reconciliation.json`, never directly from page text. The input must include verified `property`, `generatedAt`, `timezone`, and `runId` metadata. Run `node scripts/build_report.js RUN_DIR/reconciliation.json RUN_DIR/expedia-vc-report.pdf CHROMIUM_PATH`. The generator independently recomputes counts and currency totals, rejects sensitive fields, HTML-escapes every inserted string, and uses a unique restricted temporary directory. The report includes the property, Expedia property ID, timestamp and property timezone, both queues and currency-separated totals, completeness warnings, conflicts, extracted versus displayed counts, skill version, run ID, and a statement that it does not confirm a charge or refund was processed.
 
 Before delivery, verify that the PDF opens and contains the same counts and totals as `reconciliation.json`. If rendering fails, deliver the validated structured summary instead.
 

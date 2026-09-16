@@ -1,0 +1,21 @@
+{
+  "schemaVersion": "1.0.0",
+  "status": "complete",
+  "property": { "id": "TEST-100", "name": "Example & Harbor <Hotel>" },
+  "generatedAt": "2026-09-16T09:30:00-07:00",
+  "timezone": "America/Los_Angeles",
+  "runId": "test-run-001",
+  "skillVersion": "0.2.0",
+  "pageCount": 1,
+  "expectedCount": 3,
+  "extractedCount": 3,
+  "currencies": ["USD"],
+  "totals": { "USD": { "readyToChargeCents": 16525, "refundDueCents": 2000 } },
+  "warnings": [],
+  "conflicts": [],
+  "records": [
+    { "queue": "ready_to_charge", "guest": "Alex <Example>", "reservationId": "R-100", "checkIn": "2026-09-10", "status": "Available", "currency": "USD", "amountCents": 12000, "originalPayoutCents": 15000, "sourcePage": 1 },
+    { "queue": "ready_to_charge", "guest": "Sam & Example", "reservationId": "R-101", "checkIn": "2026-09-11", "status": "Deactivated", "currency": "USD", "amountCents": 4525, "originalPayoutCents": null, "sourcePage": 1 },
+    { "queue": "refund_due", "guest": "Taylor Example", "reservationId": "R-102", "checkIn": null, "status": null, "currency": "USD", "amountCents": 2000, "originalPayoutCents": null, "sourcePage": 1 }
+  ]
+}

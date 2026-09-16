@@ -8,6 +8,8 @@ This release moves financial normalization and pagination validation out of prom
 
 Browser extraction is isolated in `scripts/browser_extract_evc.js`. It runs directly in the Expedia page without Node.js dependencies and extracts both ready-to-charge and refund queues by validated column names.
 
+PDF generation is isolated in `scripts/build_report.js`. It independently verifies counts and totals, rejects sensitive fields, escapes all untrusted text, and renders through an explicitly supplied Chromium executable.
+
 ## Security
 
 - Expedia credentials are retrieved only through Kolo's approved credential storage.
