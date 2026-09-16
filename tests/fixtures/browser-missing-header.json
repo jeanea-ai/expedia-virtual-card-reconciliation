@@ -1,0 +1,9 @@
+{
+  "property": { "id": "TEST-100", "name": "Example Hotel" },
+  "expectedCounts": { "total": 1 },
+  "pagination": { "hasNext": false, "range": "1-1 of 1" },
+  "tables": [
+    { "sectionLabel": "Virtual cards ready to charge", "headers": ["Guest", "Remaining balance"], "rows": [{ "cells": ["Alex Example", "USD 10.00"] }] },
+    { "sectionLabel": "Virtual cards to refund", "headers": ["Guest", "Reservation", "Refund amount"], "rows": [] }
+  ]
+}

@@ -26,7 +26,7 @@ Resolve `expedia.username` and `expedia.password` from Kolo's approved credentia
 
 ### 1. Preflight
 
-- Require Node.js 18 or newer and confirm `scripts/extract_evc.js` exists.
+- Require Node.js 18 or newer and confirm `scripts/browser_extract_evc.js` and `scripts/extract_evc.js` exist.
 - Create a unique, permission-restricted run directory; never reuse fixed report filenames.
 - Record a run ID, selected property, skill version, and start time without credentials.
 
@@ -46,7 +46,7 @@ Verify that the visible property matches the configured property. Stop on a mism
 
 ### 4. Extract every page
 
-Map rows by validated table-header names, never fixed column numbers. Each page must produce:
+Load `scripts/browser_extract_evc.js` into the Expedia page and call `ExpediaEvcExtractor.extractDocument(document, PAGE_NUMBER)`. This browser-safe module has no Node.js, filesystem, or package dependencies. It maps rows by validated table-header names, never fixed column numbers. Each page must produce:
 
 ```json
 {
@@ -64,7 +64,7 @@ Map rows by validated table-header names, never fixed column numbers. Each page 
 }
 ```
 
-Valid queues are `ready_to_charge` and `refund_due`. Scope empty states to their own section. Never extract card number, CVV, or expiration fields.
+Valid queues are `ready_to_charge` and `refund_due`. Both sections must be present, including when empty. The extractor scopes tables to their section headings, reads original payout from nested detail rows, captures property identity and pagination state, and marks missing headers or counts incomplete. Never extract card number, CVV, or expiration fields.
 
 For pagination, start at page 1, increment consecutively, and capture Expedia's displayed total. Stop when Next is disabled or the final displayed range is reached. Mark incomplete if a page repeats, page order changes, or 100 pages are reached. Save the collected contracts as `RUN_DIR/pages.json`.
 

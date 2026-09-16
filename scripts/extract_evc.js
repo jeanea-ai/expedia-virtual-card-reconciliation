@@ -111,37 +111,7 @@ function reconcilePages(pages, options = {}) {
   };
 }
 
-function extractPage(document, pageNumber = 1) {
-  const canonical = (value) => clean(value).toLowerCase();
-  const tables = [...document.querySelectorAll("table")];
-  const records = [];
-  for (const table of tables) {
-    const headers = [...(table.rows[0]?.cells || [])].map((cell) => canonical(cell.textContent));
-    const remainingIndex = headers.findIndex((h) => h.includes("remaining balance"));
-    const guestIndex = headers.findIndex((h) => h.includes("guest"));
-    const reservationIndex = headers.findIndex((h) => h.includes("reservation"));
-    if (remainingIndex < 0 || guestIndex < 0 || reservationIndex < 0) continue;
-    const checkInIndex = headers.findIndex((h) => h.includes("check-in") || h.includes("check in"));
-    const statusIndex = headers.findIndex((h) => h === "status" || h.includes("card status"));
-    for (const row of [...table.rows].slice(1)) {
-      if (row.querySelector("table")) continue;
-      const cells = [...row.cells];
-      if (cells.length <= Math.max(remainingIndex, guestIndex, reservationIndex)) continue;
-      records.push({
-        queue: "ready_to_charge",
-        guest: clean(cells[guestIndex]?.textContent),
-        reservationId: clean(cells[reservationIndex]?.textContent),
-        checkIn: checkInIndex >= 0 ? clean(cells[checkInIndex]?.textContent) : "",
-        status: statusIndex >= 0 ? clean(cells[statusIndex]?.textContent) : "",
-        amount: clean(cells[remainingIndex]?.textContent)
-      });
-    }
-  }
-  const countMatch = clean(document.body?.textContent).match(/(?:of|total)\s+([0-9,]+)\s+(?:results?|records?)/i);
-  return { pageNumber, expectedCount: countMatch ? Number(countMatch[1].replaceAll(",", "")) : null, records };
-}
-
-module.exports = { clean, extractPage, normalizeRecord, parseMoney, reconcilePages };
+module.exports = { clean, normalizeRecord, parseMoney, reconcilePages };
 
 if (require.main === module) {
   const inputPath = process.argv[2];

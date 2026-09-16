@@ -1,0 +1,22 @@
+{
+  "property": { "id": "TEST-100", "name": "Example Hotel" },
+  "expectedCounts": { "ready_to_charge": 2, "refund_due": 1 },
+  "pagination": { "hasNext": false, "range": "1-3 of 3" },
+  "tables": [
+    {
+      "sectionLabel": "Virtual cards ready to charge",
+      "headers": ["Status", "Reservation ID", "Guest name", "Remaining balance", "Check-in"],
+      "rows": [
+        { "cells": ["Available", "R-100", "Alex Example", "USD 120.00", "2026-09-10"], "detailRows": ["Original payout USD 150.00"] },
+        { "cells": ["Deactivated", "R-101", "Sam Example", "USD 45.25", "2026-09-11"], "detailRows": [] }
+      ]
+    },
+    {
+      "sectionLabel": "Virtual cards to refund",
+      "headers": ["Guest", "Amount to refund", "Reservation"],
+      "rows": [
+        { "cells": ["Taylor Example", "USD 20.00", "R-102"], "detailRows": [] }
+      ]
+    }
+  ]
+}
