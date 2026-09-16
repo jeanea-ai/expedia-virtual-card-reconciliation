@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "reconciliation-result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "runId", "generatedAt", "timezone", "skillVersion", "property", "status", "pageCount", "expectedCount", "extractedCount", "currencies", "totals", "warnings", "conflicts", "records"],
+  "properties": {
+    "schemaVersion": { "const": "1.0.0" },
+    "runId": { "type": "string" },
+    "generatedAt": { "type": "string" },
+    "timezone": { "type": "string" },
+    "skillVersion": { "type": "string" },
+    "property": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name"],
+      "properties": { "id": { "type": "string", "minLength": 1 }, "name": { "type": "string", "minLength": 1 } }
+    },
+    "status": { "enum": ["complete", "incomplete"] },
+    "pageCount": { "type": "integer", "minimum": 1 },
+    "expectedCount": { "type": ["integer", "null"], "minimum": 0 },
+    "extractedCount": { "type": "integer", "minimum": 0 },
+    "currencies": { "type": "array", "items": { "type": "string", "pattern": "^[A-Z]{3}$" }, "uniqueItems": true },
+    "totals": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["readyToChargeCents", "refundDueCents"],
+        "properties": {
+          "readyToChargeCents": { "type": "integer", "minimum": 0 },
+          "refundDueCents": { "type": "integer", "minimum": 0 }
+        }
+      }
+    },
+    "warnings": { "type": "array", "items": { "type": "string" } },
+    "conflicts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["queue", "reservationId", "firstPage", "conflictingPage", "fields"],
+        "properties": {
+          "queue": { "enum": ["ready_to_charge", "refund_due"] },
+          "reservationId": { "type": "string" },
+          "firstPage": { "type": "integer", "minimum": 1 },
+          "conflictingPage": { "type": "integer", "minimum": 1 },
+          "fields": { "type": "array", "items": { "type": "string" }, "minItems": 1 }
+        }
+      }
+    },
+    "records": { "type": "array", "items": { "$ref": "https://github.com/jeanea-ai/expedia-virtual-card-reconciliation/schema/reconciliation-record.schema.json" } }
+  }
+}

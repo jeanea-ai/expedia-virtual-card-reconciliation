@@ -4,7 +4,26 @@ const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { parseMoney, reconcilePages } = require("../scripts/extract_evc");
+const { parseMoney, reconcilePages: reconcileRawPages } = require("../scripts/extract_evc");
+
+const TEST_CONTEXT = JSON.parse(fs.readFileSync(path.join(__dirname, "fixtures", "run-context.json"), "utf8"));
+
+function completePage(page) {
+  return {
+    extractionVersion: "1.0.0",
+    status: "complete",
+    property: { id: "TEST-100", name: "Example Hotel" },
+    pagination: { hasNext: false, range: null },
+    expectedCount: null,
+    warnings: [],
+    ...page,
+    records: (page.records || []).map((record) => ({ checkIn: "", status: "", ...record }))
+  };
+}
+
+function reconcilePages(pages, options = {}) {
+  return reconcileRawPages(pages.map(completePage), { context: TEST_CONTEXT, ...options });
+}
 
 test("parses currency with exact cents", () => {
   assert.deepEqual(parseMoney("USD 1,234.56"), { currency: "USD", amountCents: 123456 });
@@ -108,4 +127,35 @@ test("rejects malformed records instead of guessing", () => {
     () => reconcilePages([{ pageNumber: 1, records: [{ queue: "ready_to_charge", guest: "A", reservationId: "R1", amount: "about ten dollars" }] }]),
     /Invalid money/
   );
+});
+
+test("propagates verified run and property metadata", () => {
+  const result = reconcilePages([{ pageNumber: 1, expectedCount: 0, records: [] }]);
+  assert.equal(result.runId, TEST_CONTEXT.runId);
+  assert.equal(result.generatedAt, TEST_CONTEXT.generatedAt);
+  assert.equal(result.timezone, TEST_CONTEXT.timezone);
+  assert.deepEqual(result.property, TEST_CONTEXT.expectedProperty);
+});
+
+test("fails closed when the observed property ID differs", () => {
+  const result = reconcilePages([{ pageNumber: 1, expectedCount: 0, property: { id: "WRONG", name: "Example Hotel" }, records: [] }]);
+  assert.equal(result.status, "incomplete");
+  assert.match(result.warnings.join("\n"), /Property ID mismatch/);
+});
+
+test("keeps a matching property ID authoritative when the name formatting differs", () => {
+  const result = reconcilePages([{ pageNumber: 1, expectedCount: 0, property: { id: "TEST-100", name: "Example-Hotel" }, records: [] }]);
+  assert.equal(result.status, "complete");
+  assert.deepEqual(result.warnings, []);
+});
+
+test("propagates an incomplete extracted page", () => {
+  const result = reconcilePages([{ pageNumber: 1, status: "incomplete", expectedCount: 0, warnings: ["Required section not found"], records: [] }]);
+  assert.equal(result.status, "incomplete");
+  assert.match(result.warnings.join("\n"), /Required section not found/);
+});
+
+test("rejects invalid run metadata", () => {
+  const bad = { ...TEST_CONTEXT, timezone: "Not/A_Real_Zone" };
+  assert.throws(() => reconcileRawPages([completePage({ pageNumber: 1, expectedCount: 0, records: [] })], { context: bad }), /valid IANA timezone/);
 });

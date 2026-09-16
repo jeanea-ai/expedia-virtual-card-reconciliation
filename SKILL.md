@@ -28,7 +28,20 @@ Resolve `expedia.username` and `expedia.password` from Kolo's approved credentia
 
 - Require Node.js 18 or newer and confirm `scripts/browser_extract_evc.js` and `scripts/extract_evc.js` exist.
 - Create a unique, permission-restricted run directory; never reuse fixed report filenames.
-- Record a run ID, selected property, skill version, and start time without credentials.
+- Write `RUN_DIR/run-context.json` with a unique run ID, ISO 8601 start time, IANA property timezone, skill version, and configured property ID and name. Do not include credentials or browser-session data. Validate it against `schema/run-context.schema.json`.
+
+Example shape:
+
+```json
+{
+  "schemaVersion": "1.0.0",
+  "runId": "unique-run-id",
+  "generatedAt": "2026-09-16T09:30:00-07:00",
+  "timezone": "America/Los_Angeles",
+  "skillVersion": "0.2.0",
+  "expectedProperty": { "id": "configured-htid", "name": "Configured property name" }
+}
+```
 
 ### 2. Authenticate
 
@@ -71,14 +84,14 @@ For pagination, start at page 1, increment consecutively, and capture Expedia's 
 ### 5. Normalize and validate
 
 ```bash
-node scripts/extract_evc.js RUN_DIR/pages.json > RUN_DIR/reconciliation.json
+node scripts/extract_evc.js RUN_DIR/pages.json RUN_DIR/run-context.json > RUN_DIR/reconciliation.json
 ```
 
-The engine performs integer-cent parsing, schema normalization, exact-duplicate removal, conflicting-duplicate detection, repeated-page detection, currency-separated totals, and displayed-count validation. A missing count, a count that changes between pages, or conflicting values for the same queue and reservation must produce `status: incomplete`. Conflicting records are excluded from totals. If the command exits nonzero or returns `status: incomplete`, do not label the result complete. Report only the redacted reason.
+The engine validates the run context and every extracted page with the dependency-free validators generated from `schema/`, then performs integer-cent parsing, exact-duplicate removal, conflicting-duplicate detection, repeated-page detection, property-ID verification, currency-separated totals, and displayed-count validation. It propagates only verified run and property metadata into the reconciliation result and validates that final result again. A missing count, a count that changes between pages, a property-ID mismatch, an incomplete page, or conflicting values for the same queue and reservation must produce `status: incomplete`. Conflicting records are excluded from totals. If the command exits nonzero or returns `status: incomplete`, do not label the result complete. Report only the redacted reason.
 
 ### 6. Build and verify the report
 
-Generate the PDF from `reconciliation.json`, never directly from page text. The input must include verified `property`, `generatedAt`, `timezone`, and `runId` metadata. Run `node scripts/build_report.js RUN_DIR/reconciliation.json RUN_DIR/expedia-vc-report.pdf CHROMIUM_PATH`. The generator independently recomputes counts and currency totals, rejects sensitive fields, HTML-escapes every inserted string, and uses a unique restricted temporary directory. The report includes the property, Expedia property ID, timestamp and property timezone, both queues and currency-separated totals, completeness warnings, conflicts, extracted versus displayed counts, skill version, run ID, and a statement that it does not confirm a charge or refund was processed.
+Generate the PDF from `reconciliation.json`, never directly from page text. Run `node scripts/build_report.js RUN_DIR/reconciliation.json RUN_DIR/expedia-vc-report.pdf CHROMIUM_PATH`. The generator enforces `schema/reconciliation-result.schema.json`, independently recomputes counts and currency totals, rejects sensitive fields, HTML-escapes every inserted string, and uses a unique restricted temporary directory. The report includes the verified property, Expedia property ID, timestamp and property timezone, both queues and currency-separated totals, completeness warnings, conflicts, extracted versus displayed counts, skill version, run ID, and a statement that it does not confirm a charge or refund was processed.
 
 Before delivery, verify that the PDF opens and contains the same counts and totals as `reconciliation.json`. If rendering fails, deliver the validated structured summary instead.
 

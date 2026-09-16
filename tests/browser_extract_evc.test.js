@@ -6,6 +6,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const { extractSnapshot } = require("../scripts/browser_extract_evc");
 const { reconcilePages } = require("../scripts/extract_evc");
+const RUN_CONTEXT = JSON.parse(fs.readFileSync(path.join(__dirname, "fixtures", "run-context.json"), "utf8"));
 
 function fixture(name) {
   return JSON.parse(fs.readFileSync(path.join(__dirname, "fixtures", name), "utf8"));
@@ -51,7 +52,7 @@ test("fails closed when property identity or displayed totals are unavailable", 
 
 test("feeds extracted queues into deterministic reconciliation", () => {
   const extracted = extractSnapshot(fixture("browser-both-queues.json"));
-  const reconciled = reconcilePages([extracted]);
+  const reconciled = reconcilePages([extracted], { context: RUN_CONTEXT });
   assert.equal(reconciled.status, "complete");
   assert.deepEqual(reconciled.totals.USD, {
     readyToChargeCents: 16525,

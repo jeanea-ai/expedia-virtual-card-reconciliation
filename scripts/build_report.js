@@ -6,6 +6,7 @@ const os = require("node:os");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 const { spawnSync } = require("node:child_process");
+const { validateReconciliationResult } = require("./generated/validators");
 
 const FORBIDDEN_KEY = /^(?:cardnumber|fullcardnumber|cvv|cvc|expiration|expiry|password|mfacode|verificationcode)$/i;
 
@@ -31,12 +32,18 @@ function findForbiddenKeys(value, prefix = "") {
 
 function verifyReconciliation(data) {
   if (!data || typeof data !== "object") throw new Error("Reconciliation input must be an object");
+  const forbidden = findForbiddenKeys(data);
+  if (forbidden.length) throw new Error(`Sensitive fields are forbidden: ${forbidden.join(", ")}`);
+  if (!validateReconciliationResult(data)) {
+    const details = (validateReconciliationResult.errors || [])
+      .map((error) => `${error.instancePath || "/"} ${error.message}`)
+      .join("; ");
+    throw new Error(`Reconciliation input failed schema validation: ${details}`);
+  }
   if (!["complete", "incomplete"].includes(data.status)) throw new Error("Invalid reconciliation status");
   if (!Array.isArray(data.records)) throw new Error("Reconciliation records must be an array");
   if (!data.property?.id || !data.property?.name) throw new Error("Verified property identity is required");
   if (!data.generatedAt || !data.timezone || !data.runId) throw new Error("generatedAt, timezone, and runId are required");
-  const forbidden = findForbiddenKeys(data);
-  if (forbidden.length) throw new Error(`Sensitive fields are forbidden: ${forbidden.join(", ")}`);
   if (data.extractedCount !== data.records.length) throw new Error("Extracted count does not match record count");
   if (data.status === "complete" && data.expectedCount !== data.records.length) {
     throw new Error("Complete report count does not match Expedia's displayed count");

@@ -2,12 +2,32 @@
 "use strict";
 
 const fs = require("node:fs");
+const { validateRunContext, validateExtractedPage, validateReconciliationResult } = require("./generated/validators");
 
 const QUEUES = new Set(["ready_to_charge", "refund_due"]);
 const MONEY_RE = /^\s*(?:([A-Z]{3})\s*)?\$?\s*([0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)\.([0-9]{2})\s*(?:([A-Z]{3}))?\s*$/;
 
 function clean(value) {
   return String(value ?? "").replace(/\s+/g, " ").trim();
+}
+
+function schemaError(label, validator) {
+  const details = (validator.errors || []).map((error) => `${error.instancePath || "/"} ${error.message}`).join("; ");
+  return new Error(`${label} failed schema validation: ${details}`);
+}
+
+function validateContext(context) {
+  if (!validateRunContext(context)) throw schemaError("Run context", validateRunContext);
+  if (Number.isNaN(Date.parse(context.generatedAt))) throw new Error("Run context generatedAt is not a valid timestamp");
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: context.timezone }).format(new Date(context.generatedAt));
+  } catch {
+    throw new Error(`Run context timezone is not a valid IANA timezone: ${context.timezone}`);
+  }
+}
+
+function normalizedName(value) {
+  return clean(value).toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
 
 function parseMoney(value, defaultCurrency = "USD") {
@@ -59,6 +79,8 @@ function conflictingFields(first, next) {
 
 function reconcilePages(pages, options = {}) {
   if (!Array.isArray(pages) || pages.length === 0) throw new Error("At least one page is required");
+  const context = options.context;
+  validateContext(context);
   const maxPages = options.maxPages || 100;
   if (pages.length > maxPages) throw new Error(`Page limit exceeded (${maxPages})`);
 
@@ -71,12 +93,26 @@ function reconcilePages(pages, options = {}) {
   let expectedCount = null;
 
   pages.forEach((page, index) => {
+    if (!validateExtractedPage(page)) throw schemaError(`Extracted page ${index + 1}`, validateExtractedPage);
     const pageNumber = Number(page.pageNumber || index + 1);
     if (pageNumber !== index + 1) throw new Error(`Unexpected page order at page ${index + 1}`);
     if (!Array.isArray(page.records)) throw new Error(`Page ${pageNumber} has no records array`);
     const signature = page.records.map((r) => `${clean(r.queue)}:${clean(r.reservationId || r.reservation)}`).join("|");
     if (seenSignatures.has(signature)) throw new Error(`Repeated pagination result at page ${pageNumber}`);
     seenSignatures.add(signature);
+
+    if (page.status === "incomplete") {
+      const message = `Extracted page ${pageNumber} was incomplete`;
+      warnings.push(message, ...page.warnings.map((warning) => `Page ${pageNumber}: ${warning}`));
+      integrityFailures.push(message);
+    }
+    if (!clean(page.property.id) || page.property.id !== context.expectedProperty.id) {
+      const message = `Property ID mismatch on page ${pageNumber}`;
+      warnings.push(message);
+      integrityFailures.push(message);
+    } else if (normalizedName(page.property.name) !== normalizedName(context.expectedProperty.name)) {
+      warnings.push(`Property name differs on page ${pageNumber}; property ID matched`);
+    }
 
     if (Number.isInteger(page.expectedCount)) {
       if (expectedCount === null) {
@@ -134,8 +170,13 @@ function reconcilePages(pages, options = {}) {
   }
   const complete = integrityFailures.length === 0;
 
-  return {
+  const result = {
     schemaVersion: "1.0.0",
+    runId: context.runId,
+    generatedAt: context.generatedAt,
+    timezone: context.timezone,
+    skillVersion: context.skillVersion,
+    property: { id: context.expectedProperty.id, name: context.expectedProperty.name },
     status: complete ? "complete" : "incomplete",
     pageCount: pages.length,
     expectedCount,
@@ -146,19 +187,22 @@ function reconcilePages(pages, options = {}) {
     conflicts,
     records
   };
+  if (!validateReconciliationResult(result)) throw schemaError("Reconciliation result", validateReconciliationResult);
+  return result;
 }
 
 module.exports = { clean, normalizeRecord, parseMoney, reconcilePages };
 
 if (require.main === module) {
-  const inputPath = process.argv[2];
-  if (!inputPath) {
-    process.stderr.write("Usage: node scripts/extract_evc.js <pages.json>\n");
+  const [inputPath, contextPath] = process.argv.slice(2);
+  if (!inputPath || !contextPath) {
+    process.stderr.write("Usage: node scripts/extract_evc.js <pages.json> <run-context.json>\n");
     process.exit(2);
   }
   try {
     const pages = JSON.parse(fs.readFileSync(inputPath, "utf8"));
-    process.stdout.write(`${JSON.stringify(reconcilePages(pages), null, 2)}\n`);
+    const context = JSON.parse(fs.readFileSync(contextPath, "utf8"));
+    process.stdout.write(`${JSON.stringify(reconcilePages(pages, { context }), null, 2)}\n`);
   } catch (error) {
     process.stderr.write(`Extraction validation failed: ${error.message}\n`);
     process.exit(1);

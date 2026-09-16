@@ -8,7 +8,9 @@ This release moves financial normalization and pagination validation out of prom
 
 Browser extraction is isolated in `scripts/browser_extract_evc.js`. It runs directly in the Expedia page without Node.js dependencies and extracts both ready-to-charge and refund queues by validated column names.
 
-PDF generation is isolated in `scripts/build_report.js`. It independently verifies counts and totals, rejects sensitive fields, escapes all untrusted text, and renders through an explicitly supplied Chromium executable.
+PDF generation is isolated in `scripts/build_report.js`. It independently verifies the runtime schema, counts, and totals; rejects sensitive fields; escapes all untrusted text; and renders through an explicitly supplied Chromium executable.
+
+Every run carries a separate, non-secret context containing the run ID, timestamp, timezone, skill version, and expected property identity. JSON Schemas in `schema/` are compiled into dependency-free standalone validators in `scripts/generated/validators.js`; production execution does not require Ajv.
 
 ## Security
 
@@ -24,10 +26,10 @@ Requires Node.js 18 or newer:
 ```bash
 pnpm install --frozen-lockfile
 npm test
-node scripts/extract_evc.js tests/fixtures/two-pages.json
+node scripts/extract_evc.js tests/fixtures/two-pages.json tests/fixtures/run-context.json
 ```
 
-`linkedom` is a development-only dependency used to exercise the browser DOM adapter against sanitized HTML. The runtime skill remains dependency-free.
+`linkedom`, `ajv`, and `ajv-formats` are development-only dependencies used to test the browser adapter and compile the runtime contracts. `npm test` regenerates the standalone validators before running the tests. The runtime skill remains dependency-free.
 
 The command emits normalized JSON with integer-cent amounts, currency-separated totals, record counts, warnings, conflicting-record details, and a complete/incomplete status. Missing or changing displayed counts and conflicting duplicates fail closed.
 

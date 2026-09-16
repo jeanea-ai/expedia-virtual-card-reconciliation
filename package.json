@@ -5,12 +5,15 @@
   "description": "Deterministic extraction and validation engine for the Kolo Expedia Virtual Card Reconciliation skill",
   "type": "commonjs",
   "scripts": {
-    "test": "node --test"
+    "build:schemas": "node scripts/compile_schemas.js",
+    "test": "node scripts/compile_schemas.js && node --test"
   },
   "engines": {
     "node": ">=18"
   },
   "devDependencies": {
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1",
     "linkedom": "^0.18.13"
   }
 }

@@ -1,0 +1,7 @@
+{
+  "runId": "test-run-001",
+  "generatedAt": "2026-09-16T09:30:00-07:00",
+  "timezone": "America/Los_Angeles",
+  "skillVersion": "0.2.0",
+  "expectedProperty": { "id": "TEST-100", "name": "Example Hotel" }
+}

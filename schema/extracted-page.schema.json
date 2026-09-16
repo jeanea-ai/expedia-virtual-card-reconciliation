@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "extracted-page",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["extractionVersion", "pageNumber", "status", "property", "expectedCount", "pagination", "warnings", "records"],
+  "properties": {
+    "extractionVersion": { "type": "string", "const": "1.0.0" },
+    "pageNumber": { "type": "integer", "minimum": 1 },
+    "status": { "enum": ["complete", "incomplete"] },
+    "property": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name"],
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" }
+      }
+    },
+    "expectedCount": { "type": ["integer", "null"], "minimum": 0 },
+    "pagination": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["hasNext", "range"],
+      "properties": {
+        "hasNext": { "type": "boolean" },
+        "range": { "type": ["string", "null"] }
+      }
+    },
+    "warnings": { "type": "array", "items": { "type": "string" } },
+    "records": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["queue", "guest", "reservationId", "amount", "checkIn", "status"],
+        "properties": {
+          "queue": { "enum": ["ready_to_charge", "refund_due"] },
+          "guest": { "type": "string", "minLength": 1 },
+          "reservationId": { "type": "string", "minLength": 1 },
+          "amount": { "type": "string", "minLength": 1 },
+          "checkIn": { "type": "string" },
+          "status": { "type": "string" },
+          "originalPayout": { "type": "string" }
+        }
+      }
+    }
+  }
+}

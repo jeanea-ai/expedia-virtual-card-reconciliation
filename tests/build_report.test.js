@@ -38,6 +38,18 @@ test("rejects sensitive fields anywhere in the input", () => {
   assert.throws(() => verifyReconciliation(data), /Sensitive fields are forbidden/);
 });
 
+test("rejects unexpected fields under the runtime schema", () => {
+  const data = fixture();
+  data.unverifiedMetadata = "must not pass";
+  assert.throws(() => verifyReconciliation(data), /schema validation.*additional properties/i);
+});
+
+test("rejects records that do not satisfy the runtime schema", () => {
+  const data = fixture();
+  delete data.records[0].sourcePage;
+  assert.throws(() => verifyReconciliation(data), /schema validation.*sourcePage/i);
+});
+
 test("renders an explicit provisional warning for incomplete reports", () => {
   const data = fixture();
   data.status = "incomplete";

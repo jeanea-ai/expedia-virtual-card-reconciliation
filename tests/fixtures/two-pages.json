@@ -1,17 +1,27 @@
 [
   {
+    "extractionVersion": "1.0.0",
     "pageNumber": 1,
+    "status": "complete",
+    "property": { "id": "TEST-100", "name": "Example Hotel" },
     "expectedCount": 3,
+    "pagination": { "hasNext": true, "range": "1-2 of 3" },
+    "warnings": [],
     "records": [
-      { "queue": "ready_to_charge", "guest": "Alex Rivera", "reservationId": "SAN-1001", "checkIn": "2026-09-10", "status": "Available", "remainingBalance": "USD 1,234.56", "originalPayout": "USD 1,300.00" },
-      { "queue": "refund_due", "guest": "Morgan Lee", "reservationId": "SAN-1002", "amount": "$25.50 USD" }
+      { "queue": "ready_to_charge", "guest": "Alex Rivera", "reservationId": "SAN-1001", "checkIn": "2026-09-10", "status": "Available", "amount": "USD 1,234.56", "originalPayout": "USD 1,300.00" },
+      { "queue": "refund_due", "guest": "Morgan Lee", "reservationId": "SAN-1002", "checkIn": "", "status": "", "amount": "$25.50 USD" }
     ]
   },
   {
+    "extractionVersion": "1.0.0",
     "pageNumber": 2,
+    "status": "complete",
+    "property": { "id": "TEST-100", "name": "Example Hotel" },
     "expectedCount": 3,
+    "pagination": { "hasNext": false, "range": "3-3 of 3" },
+    "warnings": [],
     "records": [
-      { "queue": "ready_to_charge", "guest": "Taylor & Co.", "reservationId": "SAN-1003", "checkIn": "2026-09-11", "status": "Deactivated", "remainingBalance": "100.00" }
+      { "queue": "ready_to_charge", "guest": "Taylor & Co.", "reservationId": "SAN-1003", "checkIn": "2026-09-11", "status": "Deactivated", "amount": "100.00" }
     ]
   }
 ]
