@@ -27,7 +27,7 @@ node scripts/extract_evc.js tests/fixtures/two-pages.json
 
 `linkedom` is a development-only dependency used to exercise the browser DOM adapter against sanitized HTML. The runtime skill remains dependency-free.
 
-The command emits normalized JSON with integer-cent amounts, currency-separated totals, record counts, warnings, and a complete/incomplete status.
+The command emits normalized JSON with integer-cent amounts, currency-separated totals, record counts, warnings, conflicting-record details, and a complete/incomplete status. Missing or changing displayed counts and conflicting duplicates fail closed.
 
 ## Install
 

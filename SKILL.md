@@ -74,7 +74,7 @@ For pagination, start at page 1, increment consecutively, and capture Expedia's 
 node scripts/extract_evc.js RUN_DIR/pages.json > RUN_DIR/reconciliation.json
 ```
 
-The engine performs integer-cent parsing, schema normalization, deduplication, repeated-page detection, currency-separated totals, and displayed-count validation. If it exits nonzero or returns `status: incomplete`, do not label the result complete. Report only the redacted reason.
+The engine performs integer-cent parsing, schema normalization, exact-duplicate removal, conflicting-duplicate detection, repeated-page detection, currency-separated totals, and displayed-count validation. A missing count, a count that changes between pages, or conflicting values for the same queue and reservation must produce `status: incomplete`. Conflicting records are excluded from totals. If the command exits nonzero or returns `status: incomplete`, do not label the result complete. Report only the redacted reason.
 
 ### 6. Build and verify the report
 

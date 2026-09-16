@@ -48,8 +48,13 @@ function normalizeRecord(raw, sourcePage) {
   };
 }
 
-function recordKey(record) {
-  return [record.queue, record.reservationId, record.currency, record.amountCents].join("|");
+function identityKey(record) {
+  return [record.queue, record.reservationId].join("|");
+}
+
+function conflictingFields(first, next) {
+  return ["guest", "checkIn", "status", "currency", "amountCents", "originalPayoutCents"]
+    .filter((field) => first[field] !== next[field]);
 }
 
 function reconcilePages(pages, options = {}) {
@@ -58,9 +63,11 @@ function reconcilePages(pages, options = {}) {
   if (pages.length > maxPages) throw new Error(`Page limit exceeded (${maxPages})`);
 
   const records = [];
-  const seenRecords = new Set();
+  const recordsByIdentity = new Map();
   const seenSignatures = new Set();
   const warnings = [];
+  const conflicts = [];
+  const integrityFailures = [];
   let expectedCount = null;
 
   pages.forEach((page, index) => {
@@ -68,22 +75,43 @@ function reconcilePages(pages, options = {}) {
     if (pageNumber !== index + 1) throw new Error(`Unexpected page order at page ${index + 1}`);
     if (!Array.isArray(page.records)) throw new Error(`Page ${pageNumber} has no records array`);
     const signature = page.records.map((r) => `${clean(r.queue)}:${clean(r.reservationId || r.reservation)}`).join("|");
-    if (seenSignatures.has(signature) && signature) throw new Error(`Repeated pagination result at page ${pageNumber}`);
+    if (seenSignatures.has(signature)) throw new Error(`Repeated pagination result at page ${pageNumber}`);
     seenSignatures.add(signature);
 
     if (Number.isInteger(page.expectedCount)) {
-      if (expectedCount !== null && expectedCount !== page.expectedCount) warnings.push("Displayed result count changed during pagination");
-      expectedCount = page.expectedCount;
+      if (expectedCount === null) {
+        expectedCount = page.expectedCount;
+      } else if (expectedCount !== page.expectedCount) {
+        const message = `Displayed result count changed during pagination: ${expectedCount} to ${page.expectedCount}`;
+        warnings.push(message);
+        integrityFailures.push(message);
+      }
     }
 
     for (const raw of page.records) {
       const record = normalizeRecord(raw, pageNumber);
-      const key = recordKey(record);
-      if (seenRecords.has(key)) {
-        warnings.push(`Duplicate skipped: ${record.queue}/${record.reservationId}`);
+      const identity = identityKey(record);
+      const existing = recordsByIdentity.get(identity);
+      if (existing) {
+        const fields = conflictingFields(existing, record);
+        if (fields.length === 0) {
+          warnings.push(`Duplicate skipped: ${record.queue}/${record.reservationId}`);
+          continue;
+        }
+        const conflict = {
+          queue: record.queue,
+          reservationId: record.reservationId,
+          firstPage: existing.sourcePage,
+          conflictingPage: record.sourcePage,
+          fields
+        };
+        conflicts.push(conflict);
+        const message = `Conflicting duplicate excluded: ${record.queue}/${record.reservationId} (${fields.join(", ")})`;
+        warnings.push(message);
+        integrityFailures.push(message);
         continue;
       }
-      seenRecords.add(key);
+      recordsByIdentity.set(identity, record);
       records.push(record);
     }
   });
@@ -95,8 +123,16 @@ function reconcilePages(pages, options = {}) {
     const field = record.queue === "ready_to_charge" ? "readyToChargeCents" : "refundDueCents";
     totals[record.currency][field] += record.amountCents;
   }
-  const complete = expectedCount === null || expectedCount === records.length;
-  if (!complete) warnings.push(`Expected ${expectedCount} records but extracted ${records.length}`);
+  if (expectedCount === null) {
+    const message = "Displayed result count is required but was not captured";
+    warnings.push(message);
+    integrityFailures.push(message);
+  } else if (expectedCount !== records.length) {
+    const message = `Expected ${expectedCount} records but retained ${records.length} validated records`;
+    warnings.push(message);
+    integrityFailures.push(message);
+  }
+  const complete = integrityFailures.length === 0;
 
   return {
     schemaVersion: "1.0.0",
@@ -107,6 +143,7 @@ function reconcilePages(pages, options = {}) {
     currencies,
     totals,
     warnings,
+    conflicts,
     records
   };
 }

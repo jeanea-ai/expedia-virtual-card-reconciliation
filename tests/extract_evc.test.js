@@ -32,6 +32,20 @@ test("marks mismatched displayed totals incomplete", () => {
   assert.match(result.warnings[0], /Expected 2/);
 });
 
+test("fails closed when the displayed total is unavailable", () => {
+  const result = reconcilePages([{ pageNumber: 1, records: [] }]);
+  assert.equal(result.status, "incomplete");
+  assert.match(result.warnings.join("\n"), /Displayed result count is required/);
+});
+
+test("fails closed when the displayed total changes between pages", () => {
+  const first = { pageNumber: 1, expectedCount: 2, records: [{ queue: "ready_to_charge", guest: "A", reservationId: "R1", amount: "1.00" }] };
+  const second = { pageNumber: 2, expectedCount: 3, records: [{ queue: "ready_to_charge", guest: "B", reservationId: "R2", amount: "2.00" }] };
+  const result = reconcilePages([first, second]);
+  assert.equal(result.status, "incomplete");
+  assert.match(result.warnings.join("\n"), /changed during pagination/);
+});
+
 test("deduplicates identical records and reports the decision", () => {
   const row = { queue: "ready_to_charge", guest: "A", reservationId: "R1", amount: "USD 10.00" };
   const result = reconcilePages([{ pageNumber: 1, expectedCount: 1, records: [row, row] }]);
@@ -39,10 +53,54 @@ test("deduplicates identical records and reports the decision", () => {
   assert.match(result.warnings[0], /Duplicate skipped/);
 });
 
+test("excludes and reports conflicting duplicates without double-counting", () => {
+  const result = reconcilePages([{
+    pageNumber: 1,
+    expectedCount: 2,
+    records: [
+      { queue: "ready_to_charge", guest: "A", reservationId: "R1", amount: "USD 10.00" },
+      { queue: "ready_to_charge", guest: "A", reservationId: "R1", amount: "USD 25.00" }
+    ]
+  }]);
+  assert.equal(result.status, "incomplete");
+  assert.equal(result.records.length, 1);
+  assert.equal(result.totals.USD.readyToChargeCents, 1000);
+  assert.deepEqual(result.conflicts, [{
+    queue: "ready_to_charge",
+    reservationId: "R1",
+    firstPage: 1,
+    conflictingPage: 1,
+    fields: ["amountCents"]
+  }]);
+});
+
+test("treats a status change as a conflict even when the amount is unchanged", () => {
+  const result = reconcilePages([{
+    pageNumber: 1,
+    expectedCount: 2,
+    records: [
+      { queue: "ready_to_charge", guest: "A", reservationId: "R1", status: "Available", amount: "USD 10.00" },
+      { queue: "ready_to_charge", guest: "A", reservationId: "R1", status: "Deactivated", amount: "USD 10.00" }
+    ]
+  }]);
+  assert.equal(result.status, "incomplete");
+  assert.deepEqual(result.conflicts[0].fields, ["status"]);
+});
+
 test("accepts a validated empty page", () => {
   const result = reconcilePages([{ pageNumber: 1, expectedCount: 0, records: [] }]);
   assert.equal(result.status, "complete");
   assert.equal(result.extractedCount, 0);
+});
+
+test("detects repeated empty pages", () => {
+  assert.throws(
+    () => reconcilePages([
+      { pageNumber: 1, expectedCount: 0, records: [] },
+      { pageNumber: 2, expectedCount: 0, records: [] }
+    ]),
+    /Repeated pagination/
+  );
 });
 
 test("rejects malformed records instead of guessing", () => {
