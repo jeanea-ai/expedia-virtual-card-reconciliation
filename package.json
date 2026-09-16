@@ -2,6 +2,7 @@
   "name": "expedia-virtual-card-reconciliation",
   "version": "0.2.0",
   "private": true,
+  "packageManager": "pnpm@11.19.0",
   "description": "Deterministic extraction and validation engine for the Kolo Expedia Virtual Card Reconciliation skill",
   "type": "commonjs",
   "scripts": {
