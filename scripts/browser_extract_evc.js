@@ -127,15 +127,16 @@
   }
 
   function tableToSnapshot(table) {
-    const allRows = [...table.rows];
+    const allRows = [...table.querySelectorAll("tr")].filter((row) => row.closest("table") === table);
     const headerRow = allRows.find((row) => row.querySelector("th")) || allRows[0];
-    const headers = headerRow ? [...headerRow.cells].map((cell) => clean(cell.textContent)) : [];
+    const cellsFor = (row) => [...row.children].filter((cell) => /^(TD|TH)$/i.test(cell.tagName));
+    const headers = headerRow ? cellsFor(headerRow).map((cell) => clean(cell.textContent)) : [];
     const rows = [];
     let lastRecord = null;
     for (const row of allRows) {
       if (row === headerRow) continue;
       const nested = row.querySelector("table");
-      const cells = [...row.cells].map((cell) => clean(cell.textContent));
+      const cells = cellsFor(row).map((cell) => clean(cell.textContent));
       if (nested || cells.length === 1) {
         if (lastRecord) lastRecord.detailRows.push(clean(row.textContent));
         continue;

@@ -20,9 +20,12 @@ Browser extraction is isolated in `scripts/browser_extract_evc.js`. It runs dire
 Requires Node.js 18 or newer:
 
 ```bash
+pnpm install --frozen-lockfile
 npm test
 node scripts/extract_evc.js tests/fixtures/two-pages.json
 ```
+
+`linkedom` is a development-only dependency used to exercise the browser DOM adapter against sanitized HTML. The runtime skill remains dependency-free.
 
 The command emits normalized JSON with integer-cent amounts, currency-separated totals, record counts, warnings, and a complete/incomplete status.
 
