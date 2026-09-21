@@ -5,7 +5,7 @@
   "generatedAt": "2026-09-16T09:30:00-07:00",
   "timezone": "America/Los_Angeles",
   "runId": "test-run-001",
-  "skillVersion": "0.2.0",
+  "skillVersion": "0.2.1",
   "pageCount": 1,
   "expectedCount": 3,
   "extractedCount": 3,

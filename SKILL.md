@@ -2,7 +2,7 @@
 name: "expedia-virtual-card-reconciliation"
 description: "Reconcile Expedia virtual-card obligations into verified ready-to-charge and refund queues with a PDF guest-and-amount report. Use for: check Expedia VCs, VC reconciliation, cards ready to charge, or virtual card refund. Read-only; never charges or refunds a card."
 tags: [hotel, expedia, virtual-cards, reconciliation, browser, accounting]
-version: "0.2.0"
+version: "0.2.1"
 ---
 
 # Expedia Virtual Card Reconciliation
@@ -20,13 +20,30 @@ Read Expedia Partner Central's EVC Manage page, validate every extracted record,
 
 ## Required configuration
 
-Resolve `expedia.username` and `expedia.password` from Kolo's approved credential storage. Resolve `expedia.htid`, property name, and timezone from the property's saved non-secret configuration. If credentials are missing, start Kolo's approved credential-setup flow; do not collect secrets in conversation. If multiple properties are configured and the request is ambiguous, ask which property to use.
+Each installer completes setup separately. Credential values are never part of the Skill, its configuration files, chat history, or marketplace package.
+
+### First-run setup
+
+Run this setup before the first reconciliation and whenever the user asks to set up, reconnect, change, or remove their Expedia account:
+
+1. Resolve only the configured/not-configured status of the current user's `expedia.username` and `expedia.password` entries in Kolo's approved credential storage. Never retrieve either value for setup checks.
+2. If either entry is missing, launch Kolo's secure credential-entry interface for that entry. Do not ask the user to type credentials into chat, a normal form, a report, or a command.
+3. Save credentials with **user scope**. Never publish them with the Skill, copy them to another installer, or silently widen their scope to the team or workspace.
+4. Collect and save the non-secret property configuration: Expedia property ID (`htid`), exact property name, and IANA timezone. Support multiple properties without duplicating an ID.
+5. Build a sanitized `setup-state.json` containing only credential references, configured booleans, credential scope, and property configuration. It must never contain a username, password, MFA code, browser cookie, or session token.
+6. Run `node scripts/check_setup.js setup-state.json`. Continue only when it returns `status: ready`. Exit code `3` means setup is incomplete; launch or resume setup rather than attempting Expedia authentication.
+7. Report only that setup is complete and the configured property names. Never echo credential values or imply that one user's credentials will be available to another installer.
+
+If the user cancels secure credential entry, stop with `setup_required`. Replacing or removing a stored credential must use Kolo's approved credential manager and the platform's required confirmation. After a removal, mark setup incomplete immediately.
+
+The setup contract is defined by `schema/setup-state.schema.json`. `credentialScope` must be `user`, and the only permitted secret identifiers are `expedia.username` and `expedia.password` references. Resolve the selected property's ID, name, and timezone from the saved non-secret configuration. If multiple properties are configured and the request is ambiguous, ask which property to use.
 
 ## Deterministic workflow
 
 ### 1. Preflight
 
-- Require Node.js 18 or newer and confirm `scripts/browser_extract_evc.js` and `scripts/extract_evc.js` exist.
+- Require Node.js 18 or newer and confirm `scripts/check_setup.js`, `scripts/browser_extract_evc.js`, and `scripts/extract_evc.js` exist.
+- Require a `ready` result from `scripts/check_setup.js` for the current user before creating a run directory or opening Expedia.
 - Create a unique, permission-restricted run directory; never reuse fixed report filenames.
 - Write `RUN_DIR/run-context.json` with a unique run ID, ISO 8601 start time, IANA property timezone, skill version, and configured property ID and name. Do not include credentials or browser-session data. Validate it against `schema/run-context.schema.json`.
 
@@ -38,7 +55,7 @@ Example shape:
   "runId": "unique-run-id",
   "generatedAt": "2026-09-16T09:30:00-07:00",
   "timezone": "America/Los_Angeles",
-  "skillVersion": "0.2.0",
+  "skillVersion": "0.2.1",
   "expectedProperty": { "id": "configured-htid", "name": "Configured property name" }
 }
 ```
@@ -71,7 +88,7 @@ Load `scripts/browser_extract_evc.js` into the Expedia page and call `ExpediaEvc
     "reservationId": "ABC123",
     "checkIn": "2026-09-14",
     "status": "Available",
-    "remainingBalance": "USD 100.00",
+    "amount": "USD 100.00",
     "originalPayout": "USD 125.00"
   }]
 }
@@ -101,7 +118,7 @@ Deliver the report in the requesting conversation. Log only run ID, property, ti
 
 ## Error handling
 
-- **Missing stored credentials:** initiate approved Kolo credential setup; never request a password in chat.
+- **Missing or incomplete setup:** initiate the per-user approved Kolo credential setup; never request credentials in chat and never reuse another installer's credentials.
 - **MFA expired or rejected:** request one fresh code; never echo or persist it.
 - **Property mismatch:** stop without extraction.
 - **Validated empty section:** return a valid empty queue.

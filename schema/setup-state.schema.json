@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "setup-state",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "skillVersion", "credentialScope", "credentials", "properties"],
+  "properties": {
+    "schemaVersion": { "const": "1.0.0" },
+    "skillVersion": { "const": "0.2.1" },
+    "credentialScope": { "const": "user" },
+    "credentials": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["usernameRef", "passwordRef", "usernameConfigured", "passwordConfigured"],
+      "properties": {
+        "usernameRef": { "const": "expedia.username" },
+        "passwordRef": { "const": "expedia.password" },
+        "usernameConfigured": { "type": "boolean" },
+        "passwordConfigured": { "type": "boolean" }
+      }
+    },
+    "properties": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "name", "timezone"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "name": { "type": "string", "minLength": 1, "maxLength": 256 },
+          "timezone": { "type": "string", "pattern": "^[A-Za-z_+-]+(?:/[A-Za-z0-9_+-]+)+$" }
+        }
+      }
+    }
+  }
+}

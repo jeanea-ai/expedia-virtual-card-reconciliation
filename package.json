@@ -1,6 +1,6 @@
 {
   "name": "expedia-virtual-card-reconciliation",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "packageManager": "pnpm@11.19.0",
   "description": "Deterministic extraction and validation engine for the Kolo Expedia Virtual Card Reconciliation skill",
