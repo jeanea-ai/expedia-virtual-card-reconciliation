@@ -59,3 +59,19 @@ test("renders an explicit provisional warning for incomplete reports", () => {
   assert.match(html, /INCOMPLETE - REVIEW REQUIRED/);
   assert.match(html, /Totals are provisional/);
 });
+
+test("renders deactivated observations separately from actionable queues", () => {
+  const data = fixture();
+  data.expectedCount = 1;
+  data.extractedCount = 1;
+  data.records = [{
+    queue: "ready_to_charge", guest: "Jordan Example", reservationId: "TEST-201", checkIn: "2026-06-13",
+    status: "Deactivated", actionable: false, currency: null, amountCents: null, originalPayoutCents: null, sourcePage: 1
+  }];
+  data.currencies = [];
+  data.totals = {};
+  const html = buildReportHtml(data);
+  assert.match(html, /<strong>0<\/strong>Ready to charge/);
+  assert.match(html, /Observed Non-actionable Cards/);
+  assert.match(html, /Not chargeable/);
+});

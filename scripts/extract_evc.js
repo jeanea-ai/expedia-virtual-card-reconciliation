@@ -48,11 +48,15 @@ function normalizeRecord(raw, sourcePage) {
   const guest = clean(raw.guest);
   const reservationId = clean(raw.reservationId || raw.reservation);
   if (!guest || !reservationId) throw new Error("Record is missing guest or reservation ID");
-  const money = parseMoney(raw.amount || raw.remainingBalance, raw.currency || "USD");
+  const status = clean(raw.status) || null;
+  const deactivated = normalizedName(status) === "deactivated";
+  const hasAmount = clean(raw.amount || raw.remainingBalance) !== "";
+  if (!hasAmount && !deactivated) throw new Error("Record has no monetary amount and is not deactivated");
+  const money = hasAmount ? parseMoney(raw.amount || raw.remainingBalance, raw.currency || "USD") : null;
   let originalPayoutCents = null;
   if (clean(raw.originalPayout)) {
-    const original = parseMoney(raw.originalPayout, money.currency);
-    if (original.currency !== money.currency) throw new Error("Record contains mixed currencies");
+    const original = parseMoney(raw.originalPayout, money?.currency || raw.currency || "USD");
+    if (money && original.currency !== money.currency) throw new Error("Record contains mixed currencies");
     originalPayoutCents = original.amountCents;
   }
   return {
@@ -60,9 +64,10 @@ function normalizeRecord(raw, sourcePage) {
     guest,
     reservationId,
     checkIn: clean(raw.checkIn) || null,
-    status: clean(raw.status) || null,
-    currency: money.currency,
-    amountCents: money.amountCents,
+    status,
+    actionable: hasAmount,
+    currency: money?.currency || null,
+    amountCents: money?.amountCents ?? null,
     originalPayoutCents,
     sourcePage
   };
@@ -152,9 +157,10 @@ function reconcilePages(pages, options = {}) {
     }
   });
 
-  const currencies = [...new Set(records.map((r) => r.currency))];
+  const currencies = [...new Set(records.filter((r) => r.actionable).map((r) => r.currency))];
   const totals = {};
   for (const record of records) {
+    if (!record.actionable) continue;
     totals[record.currency] ||= { readyToChargeCents: 0, refundDueCents: 0 };
     const field = record.queue === "ready_to_charge" ? "readyToChargeCents" : "refundDueCents";
     totals[record.currency][field] += record.amountCents;

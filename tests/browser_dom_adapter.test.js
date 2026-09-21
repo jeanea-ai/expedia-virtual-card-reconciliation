@@ -49,6 +49,18 @@ test("accepts explicitly empty HTML sections", () => {
   assert.deepEqual(result.records, []);
 });
 
+test("handles deactivated badges, header aliases, tableless empty refunds, and scoped pagination", () => {
+  const result = extractFixture("deactivated-and-empty-refund.html");
+  assert.equal(result.status, "complete");
+  assert.equal(result.expectedCount, 2);
+  assert.equal(result.pagination.range, "1-2 of 2");
+  assert.equal(result.records.length, 2);
+  assert.deepEqual(result.records.map(({ checkIn, status, amount }) => ({ checkIn, status, amount })), [
+    { checkIn: "2026-06-13", status: "Deactivated", amount: null },
+    { checkIn: "2026-06-08", status: "Deactivated", amount: null }
+  ]);
+});
+
 test("fails closed on a missing HTML header", () => {
   const result = extractFixture("missing-header.html");
   assert.equal(result.status, "incomplete");
