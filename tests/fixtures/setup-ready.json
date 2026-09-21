@@ -1,0 +1,14 @@
+{
+  "schemaVersion": "1.0.0",
+  "skillVersion": "0.2.1",
+  "credentialScope": "user",
+  "credentials": {
+    "usernameRef": "expedia.username",
+    "passwordRef": "expedia.password",
+    "usernameConfigured": true,
+    "passwordConfigured": true
+  },
+  "properties": [
+    { "id": "TEST-100", "name": "Example Hotel", "timezone": "America/Los_Angeles" }
+  ]
+}
