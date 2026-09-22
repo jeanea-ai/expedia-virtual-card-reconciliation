@@ -6,7 +6,7 @@
   "required": ["schemaVersion", "skillVersion", "credentialScope", "credentials", "properties"],
   "properties": {
     "schemaVersion": { "const": "1.0.0" },
-    "skillVersion": { "const": "0.2.1" },
+    "skillVersion": { "enum": ["0.2.1", "0.2.2"] },
     "credentialScope": { "const": "user" },
     "credentials": {
       "type": "object",

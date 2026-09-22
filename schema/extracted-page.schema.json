@@ -38,7 +38,7 @@
           "queue": { "enum": ["ready_to_charge", "refund_due"] },
           "guest": { "type": "string", "minLength": 1 },
           "reservationId": { "type": "string", "minLength": 1 },
-          "amount": { "type": "string", "minLength": 1 },
+          "amount": { "type": ["string", "null"], "minLength": 1 },
           "checkIn": { "type": "string" },
           "status": { "type": "string" },
           "originalPayout": { "type": "string" }

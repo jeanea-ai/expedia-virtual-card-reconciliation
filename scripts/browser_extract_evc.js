@@ -4,7 +4,7 @@
   const HEADER_ALIASES = {
     guest: ["guest", "guest name", "traveler", "traveler name"],
     reservationId: ["reservation", "reservation id", "itinerary", "itinerary id"],
-    checkIn: ["check-in", "check in", "arrival", "arrival date"],
+    checkIn: ["check-in", "check in", "check-in date", "arrival", "arrival date"],
     status: ["status", "card status", "virtual card status"],
     remainingBalance: ["remaining balance", "available balance", "balance"],
     refundAmount: ["refund amount", "amount to refund", "refund", "amount"]
@@ -67,13 +67,15 @@
     for (const row of table.rows || []) {
       const cells = row.cells || [];
       if (row.isDetail || cells.length === 1) continue;
+      const amountText = clean(cells[amountIndex]);
+      const badgeStatus = canonical(amountText) === "deactivated" ? "Deactivated" : "";
       const record = {
         queue,
         guest: clean(cells[guestIndex]),
         reservationId: clean(cells[reservationIndex]),
-        amount: clean(cells[amountIndex]),
+        amount: badgeStatus ? null : amountText,
         checkIn: checkInIndex >= 0 ? clean(cells[checkInIndex]) : "",
-        status: statusIndex >= 0 ? clean(cells[statusIndex]) : ""
+        status: badgeStatus || (statusIndex >= 0 ? clean(cells[statusIndex]) : "")
       };
       if (queue === "ready_to_charge") record.originalPayout = extractOriginalPayout(row.detailRows);
       records.push(record);
@@ -85,7 +87,10 @@
     const warnings = [];
     const tables = Array.isArray(snapshot.tables) ? snapshot.tables : [];
     const records = tables.flatMap((table) => extractTable(table, warnings));
-    const detectedQueues = new Set(tables.map((table) => classifySection(table.sectionLabel || table.caption || table.ariaLabel, table.headers || [])).filter(Boolean));
+    const detectedQueues = new Set([
+      ...tables.map((table) => classifySection(table.sectionLabel || table.caption || table.ariaLabel, table.headers || [])).filter(Boolean),
+      ...(snapshot.emptyQueues || [])
+    ]);
     for (const queue of ["ready_to_charge", "refund_due"]) {
       if (!detectedQueues.has(queue)) warnings.push(`Required section not found: ${queue}`);
     }
@@ -162,19 +167,40 @@
     return counts;
   }
 
+  function validRange(text) {
+    const match = clean(text).match(/\b([0-9,]+)\s*[-–]\s*([0-9,]+)\s+of\s+([0-9,]+)\b/i);
+    if (!match) return null;
+    const values = match.slice(1).map((value) => Number(value.replaceAll(",", "")));
+    return values[0] >= 1 && values[0] <= values[1] && values[1] <= values[2] ? { text: match[0], total: values[2] } : null;
+  }
+
+  function emptySections(document) {
+    const queues = [];
+    for (const heading of document.querySelectorAll("h1, h2, h3, h4, [role='heading']")) {
+      const queue = classifySection(heading.textContent, []);
+      if (!queue) continue;
+      const container = heading.closest("section, article, [role='region']") || heading.parentElement;
+      if (container && /no virtual cards found\b/i.test(clean(container.textContent))) queues.push(queue);
+    }
+    return [...new Set(queues)];
+  }
+
   function extractDocument(document, pageNumber = 1) {
     const bodyText = clean(document.body?.textContent);
     const propertyId = document.querySelector("[data-property-id]")?.getAttribute("data-property-id") || new URL(document.location?.href || "https://invalid.local").searchParams.get("htid") || "";
     const propertyName = readText(document, ["[data-testid='property-name']", "[data-property-name]", "[aria-label*='property' i]"]);
     const nextButton = [...document.querySelectorAll("button")].find((button) => /next records|next/i.test(clean(button.textContent || button.getAttribute("aria-label"))));
+    const paginationNodes = [...document.querySelectorAll("[data-testid*='pagination' i], [aria-label*='pagination' i], nav, [class*='pagination' i]")];
+    const paginationRange = paginationNodes.map((node) => validRange(node.textContent)).find(Boolean) || null;
     const snapshot = {
       property: { id: clean(propertyId), name: propertyName },
-      expectedCounts: parseDisplayedCounts(bodyText),
+      expectedCounts: paginationRange ? { total: paginationRange.total } : parseDisplayedCounts(bodyText),
       pagination: {
         hasNext: Boolean(nextButton && !nextButton.disabled && nextButton.getAttribute("aria-disabled") !== "true"),
-        range: bodyText.match(/\b[0-9,]+\s*[-–]\s*[0-9,]+\s+of\s+[0-9,]+\b/i)?.[0] || null
+        range: paginationRange?.text || null
       },
-      tables: [...document.querySelectorAll("table")].map(tableToSnapshot)
+      tables: [...document.querySelectorAll("table")].map(tableToSnapshot),
+      emptyQueues: emptySections(document)
     };
     return extractSnapshot(snapshot, pageNumber);
   }

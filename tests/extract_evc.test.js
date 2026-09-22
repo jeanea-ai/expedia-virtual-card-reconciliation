@@ -112,6 +112,20 @@ test("accepts a validated empty page", () => {
   assert.equal(result.extractedCount, 0);
 });
 
+test("retains deactivated observations without treating them as chargeable money", () => {
+  const result = reconcilePages([{
+    pageNumber: 1,
+    expectedCount: 1,
+    records: [{ queue: "ready_to_charge", guest: "A", reservationId: "R1", amount: null, status: "Deactivated" }]
+  }]);
+  assert.equal(result.status, "complete");
+  assert.equal(result.extractedCount, 1);
+  assert.deepEqual(result.currencies, []);
+  assert.deepEqual(result.totals, {});
+  assert.equal(result.records[0].actionable, false);
+  assert.equal(result.records[0].amountCents, null);
+});
+
 test("detects repeated empty pages", () => {
   assert.throws(
     () => reconcilePages([

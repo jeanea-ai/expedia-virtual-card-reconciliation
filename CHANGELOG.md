@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.2
+
+- Treat a `Deactivated` remaining-balance badge as a non-actionable observation with no monetary amount.
+- Accept an explicitly empty refund queue even when Expedia renders no table.
+- Recognize the `Check-in date` column header.
+- Scope pagination range extraction and reject impossible ranges.
+
 ## 0.2.1
 
 - Add a required first-run setup flow for every installer.

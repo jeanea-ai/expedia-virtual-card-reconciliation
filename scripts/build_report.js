@@ -53,6 +53,10 @@ function verifyReconciliation(data) {
   for (const record of data.records) {
     if (!["ready_to_charge", "refund_due"].includes(record.queue)) throw new Error(`Unknown queue: ${record.queue}`);
     if (!record.reservationId || !record.guest) throw new Error("Record is missing guest or reservation ID");
+    if (!record.actionable) {
+      if (record.currency !== null || record.amountCents !== null || String(record.status).toLowerCase() !== "deactivated") throw new Error("Non-actionable record is not a deactivated card with null amount");
+      continue;
+    }
     if (!/^[A-Z]{3}$/.test(record.currency || "")) throw new Error("Record has an invalid currency");
     if (!Number.isSafeInteger(record.amountCents) || record.amountCents < 0) throw new Error("Record has an invalid amountCents");
     computed[record.currency] ||= { readyToChargeCents: 0, refundDueCents: 0 };
@@ -75,8 +79,8 @@ function recordRows(records) {
     <td>${escapeHtml(record.reservationId)}</td>
     <td>${escapeHtml(record.checkIn || "-")}</td>
     <td>${escapeHtml(record.status || "-")}</td>
-    <td>${escapeHtml(record.currency)}</td>
-    <td class="amount">${escapeHtml(formatMoney(record.amountCents, record.currency))}</td>
+    <td>${escapeHtml(record.currency || "-")}</td>
+    <td class="amount">${record.actionable ? escapeHtml(formatMoney(record.amountCents, record.currency)) : "Not chargeable"}</td>
   </tr>`).join("\n");
 }
 
@@ -93,8 +97,9 @@ function listItems(values, emptyText) {
 
 function buildReportHtml(data) {
   verifyReconciliation(data);
-  const charge = data.records.filter((record) => record.queue === "ready_to_charge");
-  const refunds = data.records.filter((record) => record.queue === "refund_due");
+  const charge = data.records.filter((record) => record.queue === "ready_to_charge" && record.actionable);
+  const refunds = data.records.filter((record) => record.queue === "refund_due" && record.actionable);
+  const nonActionable = data.records.filter((record) => !record.actionable);
   const conflicts = (data.conflicts || []).map((conflict) => `${conflict.queue}/${conflict.reservationId}: ${conflict.fields.join(", ")}`);
   const statusLabel = data.status === "complete" ? "COMPLETE" : "INCOMPLETE - REVIEW REQUIRED";
   return `<!doctype html>
@@ -133,6 +138,7 @@ ${data.status === "incomplete" ? '<div class="warning"><strong>This report is in
 <table class="totals"><tbody>${totalsRows(data.totals, "readyToChargeCents")}</tbody></table>
 <h2>Refund Due</h2><table><thead><tr><th>Guest</th><th>Reservation</th><th>Check-in</th><th>Status</th><th>Currency</th><th class="amount">Amount</th></tr></thead><tbody>${recordRows(refunds)}</tbody></table>
 <table class="totals"><tbody>${totalsRows(data.totals, "refundDueCents")}</tbody></table>
+<h2>Observed Non-actionable Cards</h2><table><thead><tr><th>Guest</th><th>Reservation</th><th>Check-in</th><th>Status</th><th>Currency</th><th class="amount">Amount</th></tr></thead><tbody>${recordRows(nonActionable)}</tbody></table>
 <h2>Validation Notes</h2><ul>${listItems(data.warnings, "No validation warnings")}</ul>
 <h2>Conflicts</h2><ul>${listItems(conflicts, "No conflicting records")}</ul>
 <div class="footer">Read-only report. It identifies Expedia virtual-card obligations and does not confirm that any charge or refund was processed. No card number, CVV, expiration, password, or MFA value is included.</div>
