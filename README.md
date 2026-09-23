@@ -2,9 +2,9 @@
 
 A read-only Kolo/OpenClaw skill that reconciles Expedia Partner Central virtual-card obligations into validated ready-to-charge and refund queues and produces a PDF report.
 
-## Version 0.2.2
+## Version 0.2.3
 
-This release fixes four live extractor variants: deactivated balance badges, tableless empty refund queues, the `Check-in date` header, and noisy page-range text. Deactivated rows remain auditable but are excluded from actionable counts and financial totals.
+This release fixes two live-DOM regressions: explicitly empty refund queues are now recognized from the heading's bounded region without a semantic wrapper, and the displayed result range is parsed from the text adjacent to the Previous/Next pagination controls without a pagination-labeled wrapper.
 
 Each installer stores their own Expedia username and password through Kolo's approved credential interface and configures their own Expedia properties. Credential values are never bundled with or shared through the Skill.
 

@@ -2,7 +2,7 @@
 name: "expedia-virtual-card-reconciliation"
 description: "Reconcile Expedia virtual-card obligations into verified ready-to-charge and refund queues with a PDF guest-and-amount report. Use for: check Expedia VCs, VC reconciliation, cards ready to charge, or virtual card refund. Read-only; never charges or refunds a card."
 tags: [hotel, expedia, virtual-cards, reconciliation, browser, accounting]
-version: "0.2.2"
+version: "0.2.3"
 ---
 
 # Expedia Virtual Card Reconciliation
@@ -55,7 +55,7 @@ Example shape:
   "runId": "unique-run-id",
   "generatedAt": "2026-09-16T09:30:00-07:00",
   "timezone": "America/Los_Angeles",
-  "skillVersion": "0.2.2",
+  "skillVersion": "0.2.3",
   "expectedProperty": { "id": "configured-htid", "name": "Configured property name" }
 }
 ```
@@ -97,6 +97,8 @@ Load `scripts/browser_extract_evc.js` into the Expedia page and call `ExpediaEvc
 Valid queues are `ready_to_charge` and `refund_due`. Both sections must be present, including when empty. The extractor scopes tables to their section headings, reads original payout from nested detail rows, captures property identity and pagination state, and marks missing headers or counts incomplete. Never extract card number, CVV, or expiration fields.
 
 When Expedia displays `Deactivated` in place of a remaining balance, retain the row as a non-actionable observation with a null amount. Count it for extraction completeness, exclude it from chargeable totals, and show it separately in the report. Any other non-money balance remains an unfamiliar structure and must fail closed.
+
+An explicitly empty queue is recognized from the heading's bounded region even when Expedia provides no semantic wrapper, and the displayed range is read from the queue pagination controls or the text adjacent to them. Ambiguous or unfamiliar structures still fail closed.
 
 For pagination, start at page 1, increment consecutively, and capture Expedia's displayed total. Stop when Next is disabled or the final displayed range is reached. Mark incomplete if a page repeats, page order changes, or 100 pages are reached. Save the collected contracts as `RUN_DIR/pages.json`.
 

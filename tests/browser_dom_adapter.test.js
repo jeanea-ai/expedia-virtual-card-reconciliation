@@ -72,3 +72,29 @@ test("fails closed when HTML does not identify the property", () => {
   assert.equal(result.status, "incomplete");
   assert.match(result.warnings.join("\n"), /Property identity was not verified/);
 });
+
+test("recognizes an empty refund queue from its bounded region without a semantic wrapper", () => {
+  const result = extractFixture("no-wrapper-empty-refund.html");
+  assert.equal(result.status, "complete");
+  assert.equal(result.expectedCount, 2);
+  assert.equal(result.pagination.range, "1-2 of 2");
+  assert.deepEqual(result.warnings, []);
+  assert.equal(result.records.length, 2);
+  assert.deepEqual(result.records.map(({ guest, reservationId, checkIn, status, amount }) => ({ guest, reservationId, checkIn, status, amount })), [
+    { guest: "Jordan Example", reservationId: "TEST-201", checkIn: "2026-10-05", status: "Deactivated", amount: null },
+    { guest: "Riley Example", reservationId: "TEST-202", checkIn: "2026-10-09", status: "Deactivated", amount: null }
+  ]);
+});
+
+test("falls back without guessing when controls-adjacent range text is ambiguous", () => {
+  const result = extractFixture("ambiguous-controls-range.html");
+  assert.equal(result.status, "incomplete");
+  assert.equal(result.pagination.range, null);
+  assert.match(result.warnings.join("\n"), /Displayed result count was not found/);
+});
+
+test("fails closed when a refund heading has neither a table nor an empty-state message", () => {
+  const result = extractFixture("unknown-refund-state.html");
+  assert.equal(result.status, "incomplete");
+  assert.match(result.warnings.join("\n"), /Required section not found: refund_due/);
+});

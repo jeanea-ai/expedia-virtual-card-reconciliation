@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.3
+
+- Recognize an explicitly empty refund queue from the heading's bounded region without a semantic wrapper.
+- Parse the displayed range from text adjacent to the Previous/Next controls without a pagination-labeled wrapper.
+- Preserve fail-closed behavior for ambiguous or unknown structures.
+- Add sanitized regression fixtures and tests.
+
 ## 0.2.2
 
 - Treat a `Deactivated` remaining-balance badge as a non-actionable observation with no monetary amount.
