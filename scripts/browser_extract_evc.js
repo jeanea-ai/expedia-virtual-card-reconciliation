@@ -174,15 +174,64 @@
     return values[0] >= 1 && values[0] <= values[1] && values[1] <= values[2] ? { text: match[0], total: values[2] } : null;
   }
 
+  function isQueueHeading(element, heading) {
+    return element !== heading && !heading.contains?.(element) && classifySection(element.textContent, []) !== null;
+  }
+
+  function boundedRegion(heading) {
+    if (!heading.parentElement) return heading;
+    let region = heading;
+    let previous = heading;
+    let cursor = heading.parentElement;
+    for (let depth = 0; cursor && depth < 12; depth += 1, previous = cursor, cursor = cursor.parentElement) {
+      const otherHeading = [...cursor.querySelectorAll("h1, h2, h3, h4, [role='heading']")].find((h) => isQueueHeading(h, heading));
+      if (otherHeading) return previous;
+      region = cursor;
+    }
+    return region;
+  }
+
   function emptySections(document) {
     const queues = [];
     for (const heading of document.querySelectorAll("h1, h2, h3, h4, [role='heading']")) {
       const queue = classifySection(heading.textContent, []);
       if (!queue) continue;
-      const container = heading.closest("section, article, [role='region']") || heading.parentElement;
-      if (container && /no virtual cards found\b/i.test(clean(container.textContent))) queues.push(queue);
+      const semantic = heading.closest("section, article, [role='region']");
+      const candidates = semantic ? [semantic, boundedRegion(heading)] : [boundedRegion(heading)];
+      for (const region of candidates) {
+        if (!region) continue;
+        if (region.querySelector("table")) continue;
+        if (/no virtual cards found\b/i.test(clean(region.textContent))) {
+          queues.push(queue);
+          break;
+        }
+      }
     }
     return [...new Set(queues)];
+  }
+
+  function wrapperRange(document) {
+    const paginationNodes = [...document.querySelectorAll("[data-testid*='pagination' i], [aria-label*='pagination' i], nav, [class*='pagination' i]")];
+    return paginationNodes.map((node) => validRange(node.textContent)).find(Boolean) || null;
+  }
+
+  function controlsRange(document) {
+    const controlsButton = [...document.querySelectorAll("button")].find((button) =>
+      /previous records|next records/i.test(clean(button.textContent || button.getAttribute("aria-label")))
+    );
+    if (!controlsButton || !controlsButton.parentElement) return null;
+    let cursor = controlsButton.parentElement;
+    for (let depth = 0; cursor && depth < 12; depth += 1, cursor = cursor.parentElement) {
+      const leafTexts = [...cursor.querySelectorAll("*")]
+        .filter((element) => element.children.length === 0)
+        .map((element) => validRange(clean(element.textContent)))
+        .filter(Boolean)
+        .map((match) => match.text);
+      const distinct = [...new Set(leafTexts)];
+      if (distinct.length === 1) return validRange(distinct[0]);
+      if (distinct.length > 1) return null;
+    }
+    return null;
   }
 
   function extractDocument(document, pageNumber = 1) {
@@ -190,8 +239,7 @@
     const propertyId = document.querySelector("[data-property-id]")?.getAttribute("data-property-id") || new URL(document.location?.href || "https://invalid.local").searchParams.get("htid") || "";
     const propertyName = readText(document, ["[data-testid='property-name']", "[data-property-name]", "[aria-label*='property' i]"]);
     const nextButton = [...document.querySelectorAll("button")].find((button) => /next records|next/i.test(clean(button.textContent || button.getAttribute("aria-label"))));
-    const paginationNodes = [...document.querySelectorAll("[data-testid*='pagination' i], [aria-label*='pagination' i], nav, [class*='pagination' i]")];
-    const paginationRange = paginationNodes.map((node) => validRange(node.textContent)).find(Boolean) || null;
+    const paginationRange = wrapperRange(document) || controlsRange(document);
     const snapshot = {
       property: { id: clean(propertyId), name: propertyName },
       expectedCounts: paginationRange ? { total: paginationRange.total } : parseDisplayedCounts(bodyText),
