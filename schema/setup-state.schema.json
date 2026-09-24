@@ -3,10 +3,10 @@
   "$id": "setup-state",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "skillVersion", "credentialScope", "credentials", "properties"],
+  "required": ["schemaVersion", "skillVersion", "credentialScope", "credentials", "properties", "authenticationMode", "vaultAvailability"],
   "properties": {
     "schemaVersion": { "const": "1.0.0" },
-    "skillVersion": { "enum": ["0.2.1", "0.2.2", "0.2.3"] },
+    "skillVersion": { "enum": ["0.2.1", "0.2.2", "0.2.3", "0.2.4"] },
     "credentialScope": { "const": "user" },
     "credentials": {
       "type": "object",
@@ -31,6 +31,17 @@
           "timezone": { "type": "string", "pattern": "^[A-Za-z_+-]+(?:/[A-Za-z0-9_+-]+)+$" }
         }
       }
-    }
+    },
+    "authenticationMode": { "enum": ["vault", "interactive_session"] },
+    "vaultAvailability": { "enum": ["available", "feature_disabled", "unknown"] },
+    "interactiveSessionVerified": { "type": "boolean" }
+  },
+  "if": {
+    "required": ["authenticationMode"],
+    "properties": { "authenticationMode": { "const": "interactive_session" } }
+  },
+  "then": {
+    "properties": { "interactiveSessionVerified": { "type": "boolean" } },
+    "required": ["interactiveSessionVerified"]
   }
 }

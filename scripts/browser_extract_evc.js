@@ -234,10 +234,56 @@
     return null;
   }
 
-  function extractDocument(document, pageNumber = 1) {
-    const bodyText = clean(document.body?.textContent);
+  function normalizePropertyName(value) {
+    return clean(value).toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  }
+
+  function observedPropertyIdentity(document) {
     const propertyId = document.querySelector("[data-property-id]")?.getAttribute("data-property-id") || new URL(document.location?.href || "https://invalid.local").searchParams.get("htid") || "";
     const propertyName = readText(document, ["[data-testid='property-name']", "[data-property-name]", "[aria-label*='property' i]"]);
+    return { id: clean(propertyId), name: propertyName };
+  }
+
+  function hasLoginSurface(document) {
+    if (document.querySelector("input[type='password']")) return true;
+    if (document.querySelector("form input[type='email'], form input[name='email']")) return true;
+    for (const heading of document.querySelectorAll("h1, h2, h3, h4, [role='heading']")) {
+      if (/sign in|log in/i.test(clean(heading.textContent))) return true;
+    }
+    for (const form of document.querySelectorAll("form[action]")) {
+      if (/login/i.test(form.getAttribute("action") || "")) return true;
+    }
+    return false;
+  }
+
+  function verifyInteractiveSession(document, expectedProperty) {
+    const authenticated = !hasLoginSurface(document);
+    if (!authenticated) {
+      return { verificationVersion: "1.0.0", authenticated: false, property: null, propertyMatch: null, ok: false, reason: "login_required" };
+    }
+
+    const observed = observedPropertyIdentity(document);
+    if (!observed.id || !observed.name) {
+      return { verificationVersion: "1.0.0", authenticated: true, property: null, propertyMatch: null, ok: false, reason: "property_ambiguous" };
+    }
+
+    const property = { id: observed.id, name: observed.name };
+    const idMatches = observed.id === clean(expectedProperty?.id);
+    const nameMatches = normalizePropertyName(observed.name) === normalizePropertyName(expectedProperty?.name);
+    const propertyMatch = idMatches && nameMatches;
+    return {
+      verificationVersion: "1.0.0",
+      authenticated: true,
+      property,
+      propertyMatch,
+      ok: propertyMatch,
+      reason: propertyMatch ? "" : "property_mismatch"
+    };
+  }
+
+  function extractDocument(document, pageNumber = 1) {
+    const bodyText = clean(document.body?.textContent);
+    const { id: propertyId, name: propertyName } = observedPropertyIdentity(document);
     const nextButton = [...document.querySelectorAll("button")].find((button) => /next records|next/i.test(clean(button.textContent || button.getAttribute("aria-label"))));
     const paginationRange = wrapperRange(document) || controlsRange(document);
     const snapshot = {
@@ -253,7 +299,7 @@
     return extractSnapshot(snapshot, pageNumber);
   }
 
-  const api = { extractDocument, extractSnapshot };
+  const api = { extractDocument, extractSnapshot, verifyInteractiveSession };
   root.ExpediaEvcExtractor = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;
 })(typeof globalThis !== "undefined" ? globalThis : this);

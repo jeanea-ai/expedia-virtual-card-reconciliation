@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.4
+
+- Formally support an interactive-login fallback when the credential vault returns `feature_disabled`; the vault remains the preferred setup mode.
+- In interactive mode the agent never handles authentication secrets: the user logs in directly on Expedia while the agent pauses.
+- After login, verify only that an authenticated session exists and the active property exactly matches the saved non-secret property configuration.
+- Interactive mode is user-initiated only; it is not for unattended or scheduled runs, and an expired session requires the user to log in again.
+- Add sanitized fixtures and regression tests for setup pairing, session verification, and fail-closed secret rejection.
+
 ## 0.2.3
 
 - Recognize an explicitly empty refund queue from the heading's bounded region without a semantic wrapper.

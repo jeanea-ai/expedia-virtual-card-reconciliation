@@ -2,7 +2,7 @@
 name: "expedia-virtual-card-reconciliation"
 description: "Reconcile Expedia virtual-card obligations into verified ready-to-charge and refund queues with a PDF guest-and-amount report. Use for: check Expedia VCs, VC reconciliation, cards ready to charge, or virtual card refund. Read-only; never charges or refunds a card."
 tags: [hotel, expedia, virtual-cards, reconciliation, browser, accounting]
-version: "0.2.3"
+version: "0.2.4"
 ---
 
 # Expedia Virtual Card Reconciliation
@@ -36,7 +36,20 @@ Run this setup before the first reconciliation and whenever the user asks to set
 
 If the user cancels secure credential entry, stop with `setup_required`. Replacing or removing a stored credential must use Kolo's approved credential manager and the platform's required confirmation. After a removal, mark setup incomplete immediately.
 
-The setup contract is defined by `schema/setup-state.schema.json`. `credentialScope` must be `user`, and the only permitted secret identifiers are `expedia.username` and `expedia.password` references. Resolve the selected property's ID, name, and timezone from the saved non-secret configuration. If multiple properties are configured and the request is ambiguous, ask which property to use.
+The setup contract is defined by `schema/setup-state.schema.json`. `credentialScope` must be `user`, and the only permitted secret identifiers are `expedia.username` and `expedia.password` references. Setup state also records the non-secret `authenticationMode` (`vault` or `interactive_session`) and `vaultAvailability` (`available`, `feature_disabled`, or `unknown`) so readiness can be assessed for the workspace. Resolve the selected property's ID, name, and timezone from the saved non-secret configuration. If multiple properties are configured and the request is ambiguous, ask which property to use.
+
+### Interactive login fallback (vault `feature_disabled` only)
+
+The vault path above stays the preferred and default setup mode. The interactive fallback applies when and only when Kolo's credential vault is unavailable with HTTP 503 `feature_disabled`.
+
+1. The agent opens Expedia Partner Central in the shared browser and pauses.
+2. The user enters their username, password, and any MFA directly on Expedia.
+3. The agent never requests, types, reads, captures, copies, logs, transmits, or persists any credential, MFA code, cookie, or session token — not in chat, files, artifacts, fixtures, reports, or memory.
+4. After the user says login is complete, the agent verifies only that an authenticated session exists and the active property exactly matches the saved non-secret property configuration. Fail closed on login failure, expired session, ambiguous identity, or property mismatch.
+5. Setup state records `authenticationMode: "interactive_session"` with only non-secret fields (never a credential, cookie, or session-token value).
+6. When the session expires, the user must log in again.
+
+**Interactive mode supports user-initiated runs but NOT unattended or scheduled runs.**
 
 ## Deterministic workflow
 
@@ -55,7 +68,7 @@ Example shape:
   "runId": "unique-run-id",
   "generatedAt": "2026-09-16T09:30:00-07:00",
   "timezone": "America/Los_Angeles",
-  "skillVersion": "0.2.3",
+  "skillVersion": "0.2.4",
   "expectedProperty": { "id": "configured-htid", "name": "Configured property name" }
 }
 ```
@@ -63,6 +76,8 @@ Example shape:
 ### 2. Authenticate
 
 Reuse an authenticated Expedia Partner Central browser session when available. Otherwise open `https://www.expediapartnercentral.com` and populate its two-step login form using secrets from Kolo credential storage. Prefer semantic browser actions by accessible label. If Expedia requests MFA, ask the user for the current code and submit it once. Stop after one credential retry and report only a redacted error.
+
+In `interactive_session` mode the agent never populates the login form. Require a fresh `verifyInteractiveSession(document, expectedProperty)` pass on the live page (via `ExpediaEvcExtractor`) before proceeding: it must return `ok: true`. On session expiry, ask the user to log in again on Expedia and re-verify. Never auto-retry authentication with any stored data.
 
 ### 3. Select and verify the property
 
@@ -123,6 +138,8 @@ Deliver the report in the requesting conversation. Log only run ID, property, ti
 ## Error handling
 
 - **Missing or incomplete setup:** initiate the per-user approved Kolo credential setup; never request credentials in chat and never reuse another installer's credentials.
+- **Vault `feature_disabled`:** offer the interactive login fallback as described above; the vault stays preferred once it is available again.
+- **Interactive session expiry:** the user logs in again on Expedia and verification is repeated; the run stops otherwise.
 - **MFA expired or rejected:** request one fresh code; never echo or persist it.
 - **Property mismatch:** stop without extraction.
 - **Validated empty section:** return a valid empty queue.
@@ -133,4 +150,4 @@ Deliver the report in the requesting conversation. Log only run ID, property, ti
 
 ## Release checks
 
-Run `npm test` before publication. Releases require coverage for exact money parsing, multipage merging, repeated pages, duplicates, empty queues, malformed rows, and count mismatches. Tag GitHub releases with the same version published in Kolo.
+Run `npm test` before publication. Releases require coverage for exact money parsing, multipage merging, repeated pages, duplicates, empty queues, malformed rows, and count mismatches. Run a secret/leak scan (structural grep for credential, MFA, cookie, session-token, and card-data markers) before publication. Tag GitHub releases with the same version published in Kolo.
