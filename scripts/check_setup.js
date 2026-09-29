@@ -29,16 +29,24 @@ function assessSetup(state) {
       `interactive_session setup is only supported as a fallback for vault feature_disabled (got vaultAvailability: ${vaultAvailability}); the vault remains preferred whenever it is available`
     );
   }
+  if (authenticationMode === "local_webform" && vaultAvailability !== "feature_disabled") {
+    throw new Error(
+      `local_webform setup is only supported as a fallback for vault feature_disabled (got vaultAvailability: ${vaultAvailability}); the vault remains preferred whenever it is available`
+    );
+  }
 
   const missing = [];
   if (authenticationMode === "vault") {
     if (vaultAvailability === "feature_disabled") {
-      missing.push("vault credential storage (feature_disabled; interactive setup available)");
+      missing.push("vault credential storage (feature_disabled; local webform or interactive setup available)");
     } else {
       if (!state.credentials.usernameConfigured) missing.push("expedia.username");
       if (!state.credentials.passwordConfigured) missing.push("expedia.password");
       if (vaultAvailability === "unknown") missing.push("vault availability unknown");
     }
+  } else if (authenticationMode === "local_webform") {
+    if (!state.credentials.usernameConfigured) missing.push("expedia.username");
+    if (!state.credentials.passwordConfigured) missing.push("expedia.password");
   } else if (state.interactiveSessionVerified !== true) {
     missing.push("interactive session verification");
   }

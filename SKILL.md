@@ -2,7 +2,7 @@
 name: "expedia-virtual-card-reconciliation"
 description: "Reconcile Expedia virtual-card obligations into verified ready-to-charge and refund queues with a PDF guest-and-amount report. Use for: check Expedia VCs, VC reconciliation, cards ready to charge, or virtual card refund. Read-only; never charges or refunds a card."
 tags: [hotel, expedia, virtual-cards, reconciliation, browser, accounting]
-version: "0.2.4"
+version: "0.2.5"
 ---
 
 # Expedia Virtual Card Reconciliation
@@ -11,9 +11,9 @@ Read Expedia Partner Central's EVC Manage page, validate every extracted record,
 
 ## Safety invariants
 
-- Retrieve the Expedia username and password only through Kolo's approved credential storage. Never ask the user to paste a password into chat.
+- Prefer Kolo's approved credential storage. When it returns `feature_disabled`, the user may explicitly choose the local one-use webform fallback. Never ask the user to paste a credential into chat or pass it on a command line.
 - Never print, log, persist in reports, or return passwords, MFA codes, full card numbers, CVVs, or expiration dates.
-- Ask for an MFA code only when Expedia requests it, use it once, and do not persist it.
+- If Expedia requests MFA, have the user enter it directly on Expedia. Never request, read, or persist it.
 - Use the authenticated session only for the property selected for this run.
 - Treat an incomplete or unfamiliar page as `incomplete`; do not issue a financial total as complete.
 - Do not perform charges, refunds, reservation edits, or other financial actions.
@@ -34,9 +34,22 @@ Run this setup before the first reconciliation and whenever the user asks to set
 6. Run `node scripts/check_setup.js setup-state.json`. Continue only when it returns `status: ready`. Exit code `3` means setup is incomplete; launch or resume setup rather than attempting Expedia authentication.
 7. Report only that setup is complete and the configured property names. Never echo credential values or imply that one user's credentials will be available to another installer.
 
-If the user cancels secure credential entry, stop with `setup_required`. Replacing or removing a stored credential must use Kolo's approved credential manager and the platform's required confirmation. After a removal, mark setup incomplete immediately.
+If the user cancels secure credential entry, stop with `setup_required`. Replacing or removing a vault credential must use Kolo's approved credential manager and the platform's required confirmation. Replacing a local fallback credential requires the explicit rotation command; removal requires its explicit confirmation option. After a removal, mark setup incomplete immediately.
 
-The setup contract is defined by `schema/setup-state.schema.json`. `credentialScope` must be `user`, and the only permitted secret identifiers are `expedia.username` and `expedia.password` references. Setup state also records the non-secret `authenticationMode` (`vault` or `interactive_session`) and `vaultAvailability` (`available`, `feature_disabled`, or `unknown`) so readiness can be assessed for the workspace. Resolve the selected property's ID, name, and timezone from the saved non-secret configuration. If multiple properties are configured and the request is ambiguous, ask which property to use.
+The setup contract is defined by `schema/setup-state.schema.json`. Vault and interactive modes use `credentialScope: "user"`; the local file fallback uses `credentialScope: "workspace_local"`. The only permitted secret identifiers are `expedia.username` and `expedia.password` references. Setup state also records the non-secret `authenticationMode` (`vault`, `local_webform`, or `interactive_session`) and `vaultAvailability` (`available`, `feature_disabled`, or `unknown`) so readiness can be assessed for the workspace. Resolve the selected property's ID, name, and timezone from the saved non-secret configuration. If multiple properties are configured and the request is ambiguous, ask which property to use.
+
+### One-use credential webform fallback (vault `feature_disabled` only)
+
+Offer this fallback only after the vault reports `feature_disabled` and the user explicitly chooses local credential storage. Explain that it is workspace-local and protected by operating-system file permissions, but is not an encrypted replacement for Kolo's vault.
+
+1. Run `npm run credentials:setup`. This starts an expiring HTTP listener bound only to `127.0.0.1`, creates a random one-use URL, and opens it in the visible shared browser. Never print, log, copy, or return the tokenized URL after opening it.
+2. The user enters the Expedia username and two matching password entries in the webform. Do not request or accept these values in chat or command arguments.
+3. The form accepts only username, password, confirmation, and its one-use token. It must never accept or store MFA codes, recovery codes, cookies, or session tokens.
+4. Run `npm run credentials:check`. It may report only presence and permission status, never a credential value or its length.
+5. Record `authenticationMode: "local_webform"`, `vaultAvailability: "feature_disabled"`, and `credentialScope: "workspace_local"` in the sanitized setup state. Continue only when both configured booleans are true and `check_setup.js` returns `ready`.
+6. To rotate credentials, run `node scripts/credential_webform.js capture --replace`; this explicit option is required. To remove them, run `node scripts/credential_webform.js remove --confirm` only after the user confirms removal.
+
+The fallback store is outside the skill and repository at `~/.openclaw/workspace-main/expedia-vc/.credentials.json`, unless `EXPEDIA_EVC_CONFIG_DIR` selects another private directory. The directory is mode `0700` and the file is mode `0600` on POSIX. Writes are locked and atomic; symbolic links and corrupt stores are refused. Credential values may be resolved only inside a trusted local authentication process by importing `readCredentials()` from `scripts/credential_webform.js`; never serialize its return value or expose it to the model, stdout, logs, exceptions, reports, or artifacts.
 
 ### Interactive login fallback (vault `feature_disabled` only)
 
@@ -68,14 +81,14 @@ Example shape:
   "runId": "unique-run-id",
   "generatedAt": "2026-09-16T09:30:00-07:00",
   "timezone": "America/Los_Angeles",
-  "skillVersion": "0.2.4",
+  "skillVersion": "0.2.5",
   "expectedProperty": { "id": "configured-htid", "name": "Configured property name" }
 }
 ```
 
 ### 2. Authenticate
 
-Reuse an authenticated Expedia Partner Central browser session when available. Otherwise open `https://www.expediapartnercentral.com` and populate its two-step login form using secrets from Kolo credential storage. Prefer semantic browser actions by accessible label. If Expedia requests MFA, ask the user for the current code and submit it once. Stop after one credential retry and report only a redacted error.
+Reuse an authenticated Expedia Partner Central browser session when available. Otherwise open `https://www.expediapartnercentral.com` and populate its two-step login form using secrets from the configured backend. In vault mode, resolve them through Kolo credential storage. In `local_webform` mode, resolve them only within a trusted local authentication process; do not return them through a tool or model-visible result. Prefer semantic browser actions by accessible label. If Expedia requests MFA, let the user enter it directly in Expedia; never collect or store it. Stop after one credential retry and report only a redacted error.
 
 In `interactive_session` mode the agent never populates the login form. Require a fresh `verifyInteractiveSession(document, expectedProperty)` pass on the live page (via `ExpediaEvcExtractor`) before proceeding: it must return `ok: true`. On session expiry, ask the user to log in again on Expedia and re-verify. Never auto-retry authentication with any stored data.
 
@@ -138,7 +151,7 @@ Deliver the report in the requesting conversation. Log only run ID, property, ti
 ## Error handling
 
 - **Missing or incomplete setup:** initiate the per-user approved Kolo credential setup; never request credentials in chat and never reuse another installer's credentials.
-- **Vault `feature_disabled`:** offer the interactive login fallback as described above; the vault stays preferred once it is available again.
+- **Vault `feature_disabled`:** offer the local one-use webform or interactive login fallback; explain their storage and session tradeoffs. The vault stays preferred once available again.
 - **Interactive session expiry:** the user logs in again on Expedia and verification is repeated; the run stops otherwise.
 - **MFA expired or rejected:** request one fresh code; never echo or persist it.
 - **Property mismatch:** stop without extraction.

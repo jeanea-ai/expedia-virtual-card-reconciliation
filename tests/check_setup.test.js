@@ -62,12 +62,12 @@ test("vault mode is preferred and ready when the vault is available", () => {
   assert.equal(result.vaultAvailability, "available");
 });
 
-test("vault mode with a feature_disabled vault reports interactive setup as available", () => {
+test("vault mode with a feature_disabled vault reports both supported fallbacks", () => {
   const state = fixture();
   state.vaultAvailability = "feature_disabled";
   const result = assessSetup(state);
   assert.equal(result.status, "setup_required");
-  assert.ok(result.missing.includes("vault credential storage (feature_disabled; interactive setup available)"));
+  assert.ok(result.missing.includes("vault credential storage (feature_disabled; local webform or interactive setup available)"));
 });
 
 test("interactive mode is ready with a verified session, one property, and no vault credentials", () => {
@@ -105,6 +105,22 @@ test("interactive mode requires interactive session verification", () => {
   const result = assessSetup(state);
   assert.equal(result.status, "setup_required");
   assert.ok(result.missing.includes("interactive session verification"));
+});
+
+test("local webform mode is ready only with local credentials and a disabled vault", () => {
+  const state = fixture();
+  state.skillVersion = "0.2.5";
+  state.authenticationMode = "local_webform";
+  state.vaultAvailability = "feature_disabled";
+  state.credentialScope = "workspace_local";
+  assert.equal(assessSetup(state).status, "ready");
+
+  state.credentials.passwordConfigured = false;
+  assert.deepEqual(assessSetup(state).missing, ["expedia.password"]);
+
+  state.credentials.passwordConfigured = true;
+  state.vaultAvailability = "available";
+  assert.throws(() => assessSetup(state), /local_webform setup is only supported as a fallback/);
 });
 
 test("rejects setup state carrying secret-shaped keys at the top level or inside credentials", () => {

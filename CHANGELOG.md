@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.5
+
+- Add an explicit, opt-in local credential fallback for workspaces where Kolo's vault returns `feature_disabled`; the vault remains preferred.
+- Capture credentials through a random, one-use, expiring loopback form opened in the visible shared browser, with matching password confirmation.
+- Store the fallback outside the repository with locking, atomic writes, owner-only POSIX permissions, symlink refusal, corrupt-store refusal, and explicit rotation protection.
+- Keep MFA codes, recovery codes, cookies, and session tokens out of the store, and expose only credential presence and permission status from checks.
+- Add security regression tests using synthetic credentials; development tests never launch the real form or request a real credential.
+
 ## 0.2.4
 
 - Formally support an interactive-login fallback when the credential vault returns `feature_disabled`; the vault remains the preferred setup mode.
