@@ -3,6 +3,7 @@
 
 const fs = require("node:fs");
 const { validateSetupState } = require("./generated/validators");
+const { checkCredentials } = require("./credential_webform");
 
 function schemaError(validator) {
   const details = (validator.errors || [])
@@ -20,35 +21,15 @@ function validTimezone(timezone) {
   }
 }
 
-function assessSetup(state) {
+function assessSetup(state, { localCredentials } = {}) {
   if (!validateSetupState(state)) throw schemaError(validateSetupState);
 
-  const { authenticationMode, vaultAvailability } = state;
-  if (authenticationMode === "interactive_session" && vaultAvailability !== "feature_disabled") {
-    throw new Error(
-      `interactive_session setup is only supported as a fallback for vault feature_disabled (got vaultAvailability: ${vaultAvailability}); the vault remains preferred whenever it is available`
-    );
-  }
-  if (authenticationMode === "local_webform" && vaultAvailability !== "feature_disabled") {
-    throw new Error(
-      `local_webform setup is only supported as a fallback for vault feature_disabled (got vaultAvailability: ${vaultAvailability}); the vault remains preferred whenever it is available`
-    );
-  }
-
   const missing = [];
-  if (authenticationMode === "vault") {
-    if (vaultAvailability === "feature_disabled") {
-      missing.push("vault credential storage (feature_disabled; local webform or interactive setup available)");
-    } else {
-      if (!state.credentials.usernameConfigured) missing.push("expedia.username");
-      if (!state.credentials.passwordConfigured) missing.push("expedia.password");
-      if (vaultAvailability === "unknown") missing.push("vault availability unknown");
-    }
-  } else if (authenticationMode === "local_webform") {
-    if (!state.credentials.usernameConfigured) missing.push("expedia.username");
-    if (!state.credentials.passwordConfigured) missing.push("expedia.password");
-  } else if (state.interactiveSessionVerified !== true) {
-    missing.push("interactive session verification");
+  const configured = localCredentials || state.credentials;
+  if (!configured.usernameConfigured) missing.push("expedia.username");
+  if (!configured.passwordConfigured) missing.push("expedia.password");
+  if (localCredentials && configured.usernameConfigured && configured.passwordConfigured && !configured.permissionsOk) {
+    missing.push("private local credential permissions");
   }
   if (state.properties.length === 0) missing.push("property configuration");
 
@@ -65,13 +46,12 @@ function assessSetup(state) {
     schemaVersion: "1.0.0",
     skillVersion: state.skillVersion,
     status: missing.length ? "setup_required" : "ready",
-    credentialScope: state.credentialScope,
+    credentialScope: "workspace_local",
     credentialRefs: [state.credentials.usernameRef, state.credentials.passwordRef],
     missing,
     propertyCount: state.properties.length,
     properties: state.properties,
-    authenticationMode: state.authenticationMode,
-    vaultAvailability: state.vaultAvailability
+    authenticationMode: "local_webform"
   };
 }
 
@@ -85,7 +65,7 @@ if (require.main === module) {
   }
   try {
     const state = JSON.parse(fs.readFileSync(inputPath, "utf8"));
-    const result = assessSetup(state);
+    const result = assessSetup(state, { localCredentials: checkCredentials() });
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     if (result.status !== "ready") process.exitCode = 3;
   } catch (error) {

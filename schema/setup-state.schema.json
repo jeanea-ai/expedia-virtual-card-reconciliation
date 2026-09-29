@@ -3,20 +3,46 @@
   "$id": "setup-state",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "skillVersion", "credentialScope", "credentials", "properties", "authenticationMode", "vaultAvailability"],
+  "required": [
+    "schemaVersion",
+    "skillVersion",
+    "credentialScope",
+    "credentials",
+    "properties",
+    "authenticationMode"
+  ],
   "properties": {
-    "schemaVersion": { "const": "1.0.0" },
-    "skillVersion": { "enum": ["0.2.1", "0.2.2", "0.2.3", "0.2.4", "0.2.5"] },
-    "credentialScope": { "enum": ["user", "workspace_local"] },
+    "schemaVersion": {
+      "const": "1.0.0"
+    },
+    "skillVersion": {
+      "const": "0.2.7"
+    },
+    "credentialScope": {
+      "const": "workspace_local"
+    },
     "credentials": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["usernameRef", "passwordRef", "usernameConfigured", "passwordConfigured"],
+      "required": [
+        "usernameRef",
+        "passwordRef",
+        "usernameConfigured",
+        "passwordConfigured"
+      ],
       "properties": {
-        "usernameRef": { "const": "expedia.username" },
-        "passwordRef": { "const": "expedia.password" },
-        "usernameConfigured": { "type": "boolean" },
-        "passwordConfigured": { "type": "boolean" }
+        "usernameRef": {
+          "const": "expedia.username"
+        },
+        "passwordRef": {
+          "const": "expedia.password"
+        },
+        "usernameConfigured": {
+          "type": "boolean"
+        },
+        "passwordConfigured": {
+          "type": "boolean"
+        }
       }
     },
     "properties": {
@@ -24,49 +50,31 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "name", "timezone"],
+        "required": [
+          "id",
+          "name",
+          "timezone"
+        ],
         "properties": {
-          "id": { "type": "string", "minLength": 1, "maxLength": 128 },
-          "name": { "type": "string", "minLength": 1, "maxLength": 256 },
-          "timezone": { "type": "string", "pattern": "^[A-Za-z_+-]+(?:/[A-Za-z0-9_+-]+)+$" }
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "timezone": {
+            "type": "string",
+            "pattern": "^[A-Za-z_+-]+(?:/[A-Za-z0-9_+-]+)+$"
+          }
         }
       }
     },
-    "authenticationMode": { "enum": ["vault", "local_webform", "interactive_session"] },
-    "vaultAvailability": { "enum": ["available", "feature_disabled", "unknown"] },
-    "interactiveSessionVerified": { "type": "boolean" }
-  },
-  "allOf": [
-    {
-      "if": {
-        "required": ["authenticationMode"],
-        "properties": { "authenticationMode": { "const": "interactive_session" } }
-      },
-      "then": {
-        "properties": {
-          "credentialScope": { "const": "user" },
-          "interactiveSessionVerified": { "type": "boolean" }
-        },
-        "required": ["interactiveSessionVerified"]
-      }
-    },
-    {
-      "if": {
-        "required": ["authenticationMode"],
-        "properties": { "authenticationMode": { "const": "local_webform" } }
-      },
-      "then": {
-        "properties": { "credentialScope": { "const": "workspace_local" } }
-      }
-    },
-    {
-      "if": {
-        "required": ["authenticationMode"],
-        "properties": { "authenticationMode": { "const": "vault" } }
-      },
-      "then": {
-        "properties": { "credentialScope": { "const": "user" } }
-      }
+    "authenticationMode": {
+      "const": "local_webform"
     }
-  ]
+  }
 }

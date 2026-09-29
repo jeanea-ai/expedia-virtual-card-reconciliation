@@ -82,8 +82,8 @@ test("excludes and reports conflicting duplicates without double-counting", () =
     ]
   }]);
   assert.equal(result.status, "incomplete");
-  assert.equal(result.records.length, 1);
-  assert.equal(result.totals.USD.readyToChargeCents, 1000);
+  assert.equal(result.records.length, 0);
+  assert.deepEqual(result.totals, {});
   assert.deepEqual(result.conflicts, [{
     queue: "ready_to_charge",
     reservationId: "R1",

@@ -91,6 +91,7 @@ function reconcilePages(pages, options = {}) {
 
   const records = [];
   const recordsByIdentity = new Map();
+  const conflictedIdentities = new Set();
   const seenSignatures = new Set();
   const warnings = [];
   const conflicts = [];
@@ -147,6 +148,7 @@ function reconcilePages(pages, options = {}) {
           fields
         };
         conflicts.push(conflict);
+        conflictedIdentities.add(identity);
         const message = `Conflicting duplicate excluded: ${record.queue}/${record.reservationId} (${fields.join(", ")})`;
         warnings.push(message);
         integrityFailures.push(message);
@@ -157,9 +159,10 @@ function reconcilePages(pages, options = {}) {
     }
   });
 
-  const currencies = [...new Set(records.filter((r) => r.actionable).map((r) => r.currency))];
+  const verifiedRecords = records.filter((record) => !conflictedIdentities.has(identityKey(record)));
+  const currencies = [...new Set(verifiedRecords.filter((r) => r.actionable).map((r) => r.currency))];
   const totals = {};
-  for (const record of records) {
+  for (const record of verifiedRecords) {
     if (!record.actionable) continue;
     totals[record.currency] ||= { readyToChargeCents: 0, refundDueCents: 0 };
     const field = record.queue === "ready_to_charge" ? "readyToChargeCents" : "refundDueCents";
@@ -169,8 +172,8 @@ function reconcilePages(pages, options = {}) {
     const message = "Displayed result count is required but was not captured";
     warnings.push(message);
     integrityFailures.push(message);
-  } else if (expectedCount !== records.length) {
-    const message = `Expected ${expectedCount} records but retained ${records.length} validated records`;
+  } else if (expectedCount !== verifiedRecords.length) {
+    const message = `Expected ${expectedCount} records but retained ${verifiedRecords.length} validated records`;
     warnings.push(message);
     integrityFailures.push(message);
   }
@@ -186,12 +189,12 @@ function reconcilePages(pages, options = {}) {
     status: complete ? "complete" : "incomplete",
     pageCount: pages.length,
     expectedCount,
-    extractedCount: records.length,
+    extractedCount: verifiedRecords.length,
     currencies,
     totals,
     warnings,
     conflicts,
-    records
+    records: verifiedRecords
   };
   if (!validateReconciliationResult(result)) throw schemaError("Reconciliation result", validateReconciliationResult);
   return result;

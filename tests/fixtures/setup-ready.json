@@ -1,9 +1,8 @@
 {
   "schemaVersion": "1.0.0",
-  "skillVersion": "0.2.1",
-  "credentialScope": "user",
-  "authenticationMode": "vault",
-  "vaultAvailability": "available",
+  "skillVersion": "0.2.7",
+  "credentialScope": "workspace_local",
+  "authenticationMode": "local_webform",
   "credentials": {
     "usernameRef": "expedia.username",
     "passwordRef": "expedia.password",
@@ -11,6 +10,10 @@
     "passwordConfigured": true
   },
   "properties": [
-    { "id": "TEST-100", "name": "Example Hotel", "timezone": "America/Los_Angeles" }
+    {
+      "id": "TEST-100",
+      "name": "Example Hotel",
+      "timezone": "America/Los_Angeles"
+    }
   ]
 }
