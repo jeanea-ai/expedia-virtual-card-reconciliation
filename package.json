@@ -1,22 +1,26 @@
 {
   "name": "expedia-virtual-card-reconciliation",
-  "version": "0.2.5",
+  "version": "0.2.7",
   "private": true,
   "packageManager": "pnpm@11.19.0",
-  "description": "Deterministic extraction and validation engine for the Kolo Expedia Virtual Card Reconciliation skill",
+  "description": "Local-only Expedia virtual card reconciliation with read-only extraction and a private credential webform",
   "type": "commonjs",
   "scripts": {
     "build:schemas": "node scripts/compile_schemas.js",
     "credentials:setup": "node scripts/credential_webform.js capture",
     "credentials:check": "node scripts/credential_webform.js check",
-    "test": "node scripts/compile_schemas.js && node --test"
+    "test": "node scripts/compile_schemas.js && node --test",
+    "login:local": "node scripts/login_local.js"
   },
   "engines": {
     "node": ">=18"
   },
   "devDependencies": {
-    "ajv": "^8.20.0",
     "ajv-formats": "^3.0.1",
     "linkedom": "^0.18.13"
+  },
+  "dependencies": {
+    "ajv": "^8.20.0",
+    "ws": "^8.22.0"
   }
 }

@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.2.7 (2026-09-29)
+
+- Match queue table headers by alias prefix when Expedia concatenates help text onto a column title (for example the refund money header), keeping the exact alias match first and failing closed when nothing matches.
+- Read the pagination range and displayed count per queue section from each heading's bounded region, ignoring the outer wrapper range above both queues, and join the per-queue ranges into the pagination range string; pagination `hasNext` now follows any queue whose shown range ends before its total.
+- Fall back to the previous single global range read (pagination wrapper, controls-adjacent range, or displayed-count text) whenever a queue's count cannot be determined, and fail closed with a warning naming the queue.
+
+## 0.2.6
+
+- Use the one-use workspace-local credential webform as the sole credential setup path; remove vault and interactive setup modes.
+- Add a local CDP login helper that reads saved credentials inside its own process, submits them only on Expedia-owned origins, and returns redacted status. MFA remains user-entered on Expedia.
+- Require the readiness command to check the real local credential file and its permissions.
+- Package Ajv as a runtime dependency for the generated validators.
+- Exclude both sides of conflicting reservation records from provisional totals.
+
 ## 0.2.5
 
 - Add an explicit, opt-in local credential fallback for workspaces where Kolo's vault returns `feature_disabled`; the vault remains preferred.

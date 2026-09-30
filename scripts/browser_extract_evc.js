@@ -20,7 +20,9 @@
 
   function findHeaderIndex(headers, field) {
     const aliases = HEADER_ALIASES[field];
-    return headers.findIndex((header) => aliases.includes(canonical(header)));
+    const exact = headers.findIndex((header) => aliases.includes(canonical(header)));
+    if (exact >= 0) return exact;
+    return headers.findIndex((header) => aliases.some((alias) => canonical(header).startsWith(alias)));
   }
 
   function classifySection(label, headers) {
@@ -234,6 +236,42 @@
     return null;
   }
 
+  function rangeShownEnd(text) {
+    const match = clean(text).match(/\b([0-9,]+)\s*[-–]\s*([0-9,]+)\s+of\s+([0-9,]+)\b/i);
+    return match ? Number(match[2].replaceAll(",", "")) : null;
+  }
+
+  function queuePaginationStates(document, emptyQueues) {
+    const states = {};
+    for (const heading of document.querySelectorAll("h1, h2, h3, h4, [role='heading']")) {
+      const queue = classifySection(heading.textContent, []);
+      if (!queue) continue;
+      const region = boundedRegion(heading);
+      if (!region) continue;
+      const state = states[queue] || (states[queue] = { rangeTexts: new Set(), hasTable: false });
+      if (region.querySelector("table")) state.hasTable = true;
+      for (const element of region.querySelectorAll("*")) {
+        if (element.children.length !== 0) continue;
+        const range = validRange(clean(element.textContent));
+        if (range) state.rangeTexts.add(range.text);
+      }
+    }
+    const pagination = {};
+    for (const [queue, state] of Object.entries(states)) {
+      if (state.rangeTexts.size === 1) {
+        const range = validRange([...state.rangeTexts][0]);
+        pagination[queue] = { count: range.total, range, unknown: false, ambiguous: false };
+      } else if (state.rangeTexts.size > 1) {
+        pagination[queue] = { count: null, range: null, unknown: true, ambiguous: true };
+      } else if (!state.hasTable && emptyQueues.includes(queue)) {
+        pagination[queue] = { count: 0, range: null, unknown: false, ambiguous: false };
+      } else {
+        pagination[queue] = { count: null, range: null, unknown: true, ambiguous: false };
+      }
+    }
+    return pagination;
+  }
+
   function normalizePropertyName(value) {
     return clean(value).toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
   }
@@ -285,18 +323,62 @@
     const bodyText = clean(document.body?.textContent);
     const { id: propertyId, name: propertyName } = observedPropertyIdentity(document);
     const nextButton = [...document.querySelectorAll("button")].find((button) => /next records|next/i.test(clean(button.textContent || button.getAttribute("aria-label"))));
-    const paginationRange = wrapperRange(document) || controlsRange(document);
-    const snapshot = {
-      property: { id: clean(propertyId), name: propertyName },
-      expectedCounts: paginationRange ? { total: paginationRange.total } : parseDisplayedCounts(bodyText),
-      pagination: {
+    const emptyQueues = emptySections(document);
+    const queuePagination = queuePaginationStates(document, emptyQueues);
+    const queues = ["refund_due", "ready_to_charge"];
+    const paginationWarnings = [];
+    let expectedCounts;
+    let pagination;
+
+    if (queues.every((queue) => queuePagination[queue] && !queuePagination[queue].unknown)) {
+      expectedCounts = {
+        ready_to_charge: queuePagination.ready_to_charge.count,
+        refund_due: queuePagination.refund_due.count
+      };
+      pagination = {
+        hasNext: queues.some((queue) => {
+          const range = queuePagination[queue].range;
+          if (!range) return false;
+          const shownEnd = rangeShownEnd(range.text);
+          return shownEnd !== null && shownEnd < range.total;
+        }),
+        range: queues
+          .filter((queue) => queuePagination[queue].range)
+          .map((queue) => `${queue} ${queuePagination[queue].range.text}`)
+          .join("; ") || null
+      };
+    } else {
+      const paginationRange = wrapperRange(document) || controlsRange(document);
+      expectedCounts = paginationRange ? { total: paginationRange.total } : parseDisplayedCounts(bodyText);
+      pagination = {
         hasNext: Boolean(nextButton && !nextButton.disabled && nextButton.getAttribute("aria-disabled") !== "true"),
         range: paginationRange?.text || null
-      },
+      };
+      if (!Number.isInteger(expectedCounts.total)) {
+        for (const queue of queues) {
+          if (queuePagination[queue]?.unknown && !queuePagination[queue].ambiguous) {
+            paginationWarnings.push(`Displayed count not found for ${queue} section`);
+          }
+        }
+      }
+    }
+    for (const queue of queues) {
+      if (queuePagination[queue]?.ambiguous) paginationWarnings.push(`Ambiguous pagination range in ${queue} section`);
+    }
+
+    const snapshot = {
+      property: { id: clean(propertyId), name: propertyName },
+      expectedCounts,
+      pagination,
       tables: [...document.querySelectorAll("table")].map(tableToSnapshot),
-      emptyQueues: emptySections(document)
+      emptyQueues
     };
-    return extractSnapshot(snapshot, pageNumber);
+    const result = extractSnapshot(snapshot, pageNumber);
+    if (paginationWarnings.length) {
+      result.warnings.push(...paginationWarnings);
+      result.status = "incomplete";
+    }
+    return result;
   }
 
   const api = { extractDocument, extractSnapshot, verifyInteractiveSession };
